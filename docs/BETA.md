@@ -17,8 +17,7 @@ operators. This page explains what that means for you.
 - **Run it next to your existing setup, not instead of it.** RESURGAM never replaces PBS or PVE;
   they remain the systems of record for your backups. Don't make RESURGAM your only way of
   knowing whether backups work until you trust it in your environment.
-- **Best-effort support.** Issues and questions are answered on GitHub as time allows. For
-  commercial support, contact [cybrwerk](https://cybrwerk.ch).
+- **Best-effort support.** Issues and questions are answered on GitHub as time allows.
 
 ## Tested with
 
