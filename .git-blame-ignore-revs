@@ -1,0 +1,5 @@
+# Bulk formatting commits -- use with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# style(backend): apply ruff format across the codebase
+fde9fc83a5f1dfd713da41d55227aac81e004a0f
+# style(restore-worker): apply ruff format across the package
+1457b693dc0a94f8be89956312e8f9de6b26659f

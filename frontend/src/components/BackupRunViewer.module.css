@@ -1,0 +1,56 @@
+/* BackupRunViewer.tsx -- tokens only. */
+.tasks {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}
+
+.task {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.taskHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+}
+
+.log {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  max-block-size: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 17px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.upidRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-start: var(--space-1);
+}
+
+.upid {
+  min-inline-size: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

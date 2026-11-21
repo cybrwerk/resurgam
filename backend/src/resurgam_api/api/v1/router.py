@@ -1,0 +1,102 @@
+from fastapi import APIRouter
+
+from resurgam_api.api.v1 import (
+    alarms,
+    alert_mailer,
+    api_tokens,
+    application_groups,
+    audit,
+    auth,
+    billing,
+    branding,
+    compliance_attestations,
+    config_backup,
+    credentials,
+    customers,
+    datastores,
+    disk_mount_setup,
+    disk_mounts,
+    file_index,
+    filerestore,
+    instance_settings,
+    instant_recovery,
+    integrations,
+    inventory,
+    lab_agent,
+    lab_agent_disk_mounts,
+    lab_pairing,
+    leg_applicability,
+    mail_settings,
+    mfa,
+    notification_settings,
+    pbs_instances,
+    pbs_jobs,
+    pricing_plans,
+    protection_policies,
+    pve_backup_run,
+    pve_clusters,
+    pve_lab_provisioning,
+    pve_lab_setup,
+    reporting,
+    restore_execution,
+    restore_plans,
+    restore_test_plans,
+    setup,
+    system,
+    update_source,
+    updates,
+    users,
+    zabbix,
+)
+
+router = APIRouter(prefix="/api/v1")
+router.include_router(system.router)
+router.include_router(setup.router)
+router.include_router(branding.router)
+router.include_router(instance_settings.router)
+router.include_router(mail_settings.router)
+router.include_router(auth.router)
+router.include_router(customers.router)
+router.include_router(pbs_instances.router)
+router.include_router(pbs_jobs.router)
+router.include_router(pve_clusters.router)
+router.include_router(pve_backup_run.router)
+router.include_router(pve_lab_setup.router)
+router.include_router(pve_lab_provisioning.router)
+router.include_router(datastores.router)
+router.include_router(compliance_attestations.router)
+router.include_router(leg_applicability.router)
+router.include_router(notification_settings.router)
+router.include_router(alert_mailer.router)
+router.include_router(inventory.router)
+router.include_router(protection_policies.router)
+router.include_router(pricing_plans.router)
+router.include_router(alarms.router)
+router.include_router(billing.router)
+router.include_router(credentials.router)
+router.include_router(users.router)
+router.include_router(users.policy_router)
+router.include_router(mfa.router)
+router.include_router(filerestore.router)
+router.include_router(file_index.router)
+router.include_router(restore_plans.router)
+router.include_router(restore_execution.router)
+router.include_router(instant_recovery.router)
+router.include_router(audit.router)
+router.include_router(reporting.router)
+router.include_router(integrations.router)
+router.include_router(application_groups.router)
+router.include_router(restore_test_plans.router)
+router.include_router(lab_agent.router)
+router.include_router(lab_agent_disk_mounts.router)
+router.include_router(instant_recovery.agent_router)
+router.include_router(lab_pairing.admin_router)
+router.include_router(lab_pairing.bootstrap_router)
+router.include_router(lab_pairing.agent_router)
+router.include_router(disk_mounts.router)
+router.include_router(disk_mount_setup.router)
+router.include_router(zabbix.router)
+router.include_router(config_backup.router)
+router.include_router(update_source.router)
+router.include_router(updates.router)
+router.include_router(api_tokens.router)

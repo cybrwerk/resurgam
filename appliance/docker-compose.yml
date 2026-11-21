@@ -1,0 +1,175 @@
+# Manifest §5.3's containerized half of the appliance: API, UI, and
+# PostgreSQL as Compose services. The privileged workers are
+# deliberately absent here -- see backend/Dockerfile's own comment for
+# why, and backend/packaging/systemd/ for the native units that run
+# alongside this stack on the same VM (recovery-lab-scheduler's unit is
+# still missing there as of this writing -- next piece of this work).
+#
+# Usage: cp .env.example .env, edit it, then `docker compose up -d`
+# from this directory.
+#
+# Images, not builds (ADR 0024): the API/UI images are tagged with the
+# release version and arrive either prebuilt in the appliance image or
+# via a signed update bundle (`docker load`), so the appliance never
+# builds anything itself. RESURGAM_VERSION (in .env) picks the tag; the
+# host updater switches it. To build the images from this checkout
+# instead (local smoke test, DEPLOY.md's manual install), add the build
+# override:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    # Docker's default /dev/shm is 64 MB; Postgres uses it for parallel
+    # query/vacuum workers and failed with "could not resize shared memory
+    # segment ... No space left on device" on the appliance (2026-11-13,
+    # VACUUM after deleting 5.7M File Index rows).
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-resurgam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a real password in .env, see .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-resurgam}
+    # Published to loopback only -- the native systemd workers
+    # (packaging/systemd/, not part of this Compose stack) run on the VM
+    # host itself and need to reach this database directly; nothing
+    # outside the VM should ever be able to.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - resurgam-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resurgam}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: resurgam-backend:${RESURGAM_VERSION:?set RESURGAM_VERSION in .env -- the release version, see ../VERSION}
+    # Never pull: these images exist only locally (prebuilt or docker
+    # load-ed from an update bundle) -- a missing tag is an error to see,
+    # not something to fetch from a registry.
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-resurgam}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-resurgam}
+      SESSION_SECRET: ${SESSION_SECRET:?set a real secret in .env, see .env.example}
+      SECRETS_LOCAL_ENCRYPTION_KEY: ${SECRETS_LOCAL_ENCRYPTION_KEY:?set a real key in .env, see .env.example}
+      BREAKGLASS_ENABLED: ${BREAKGLASS_ENABLED:-true}
+      BREAKGLASS_USERNAME: ${BREAKGLASS_USERNAME:-admin}
+      # Not a required ${VAR:?...} guard like the secrets above -- it's
+      # only actually required when BREAKGLASS_ENABLED=true, which
+      # config.py's own startup validator already enforces. A blanket
+      # requirement here would wrongly block the legitimate
+      # breakglass-disabled, no-hash-needed configuration.
+      BREAKGLASS_PASSWORD_HASH: ${BREAKGLASS_PASSWORD_HASH:-}
+      FRONTEND_ORIGIN: https://${RESURGAM_DOMAIN:-localhost}
+      WEBAUTHN_RP_ID: ${RESURGAM_DOMAIN:-localhost}
+      WEBAUTHN_ORIGIN: https://${RESURGAM_DOMAIN:-localhost}
+      RECOVERY_LAB_PUBLIC_BACKEND_URL: https://${RESURGAM_DOMAIN:-localhost}/api/v1
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_REDIRECT_URI: https://${RESURGAM_DOMAIN:-localhost}/api/v1/auth/oidc/callback
+      # Written natively by resurgam-host-probe.service -- the setup
+      # wizard's nested-KVM check has to reflect what the native workers
+      # can reach, and this container never gets /dev/kvm itself.
+      HOST_CAPABILITIES_FILE: /run/resurgam-host/host-capabilities.json
+      # The running release (GET /api/v1/version) -- the same value that
+      # picks the image tag above.
+      RESURGAM_VERSION: ${RESURGAM_VERSION}
+      # Appliance updates (ADR 0024): the API only drops uploaded bundles
+      # and request files here and reads the host updater's status files
+      # back; it never gets Docker or systemd access itself.
+      UPDATES_DIR: /var/lib/resurgam/updates
+      BACKUPS_DIR: /var/lib/resurgam/backups
+      # File-restore download content (single files, folder/multi-selection ZIPs): written by
+      # the native file-restore worker, streamed to the browser from here. Same path as in the
+      # worker unit (backend/packaging/systemd/resurgam-file-restore-worker.service).
+      FILE_RESTORE_OUTPUT_DIR: /var/lib/resurgam/file-restore
+      # Caddy's `tls internal` root certificate, exported by the ca-export
+      # service below -- handed to a lab node at pairing (ADR 0027).
+      APPLIANCE_TLS_CA_FILE: /appliance-ca/root.crt
+      # The API is reachable only through Caddy (no published port), which
+      # sets X-Forwarded-For itself -- so the real client IP can be trusted
+      # for API token IP allowlists (docs/adr/0029).
+      TRUST_PROXY_HEADERS: "true"
+    volumes:
+      # The directory, not the file: a missing file would make Docker
+      # create a directory in its place. Read-only -- only the host probe
+      # writes here.
+      - /run/resurgam:/run/resurgam-host:ro
+      # Shared with the host updater (resurgam-updater.service), same path
+      # on both sides so file names in status files mean the same thing.
+      - /var/lib/resurgam/updates:/var/lib/resurgam/updates
+      # Pre-update database dumps -- listed in the UI, written only by the
+      # host updater.
+      - /var/lib/resurgam/backups:/var/lib/resurgam/backups:ro
+      # File-restore download content -- created by host-setup.sh (owner resurgam-worker, the
+      # native worker writes it). Read-only here: the API only streams finished files and
+      # measures free space; the worker's expiry sweep deletes them.
+      - /var/lib/resurgam/file-restore:/var/lib/resurgam/file-restore:ro
+      # Only Caddy's public root certificate (read-only), never Caddy's data
+      # volume: that also holds the CA's private keys, which would let anyone
+      # who compromises the API mint certificates for this appliance. The
+      # lab agent verifies this appliance with the certificate (ADR 0027).
+      - resurgam-appliance-ca:/appliance-ca:ro
+
+  web:
+    image: resurgam-web:${RESURGAM_VERSION:?set RESURGAM_VERSION in .env -- the release version, see ../VERSION}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      RESURGAM_DOMAIN: ${RESURGAM_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - resurgam-caddy-data:/data
+      - resurgam-caddy-config:/config
+
+  # Copies Caddy's `tls internal` root *certificate* (public) out of Caddy's
+  # data volume into resurgam-appliance-ca, the only part of it the backend
+  # gets. A sidecar rather than a wrapper around Caddy's own entrypoint: the
+  # web container keeps running Caddy as PID 1 unchanged, and no Compose
+  # volume `subpath` is needed (that needs a recent Docker Engine and could
+  # only expose the whole authorities/local directory -- root.key included).
+  # Caddy creates its CA lazily (first certificate, first boot) and may
+  # renew the root; the loop picks either up within a minute -- the backend
+  # only reads the file when a lab node is paired, so a late copy is fine.
+  # Same image as `web` (busybox sh/cmp from the Caddy Alpine base), so
+  # there is nothing extra to ship in an update bundle.
+  ca-export:
+    image: resurgam-web:${RESURGAM_VERSION:?set RESURGAM_VERSION in .env -- the release version, see ../VERSION}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - web
+    # tini as PID 1 so `docker compose stop` ends the loop at once.
+    init: true
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        trap 'exit 0' TERM INT
+        src=/data/caddy/pki/authorities/local/root.crt
+        while :; do
+          if [ -s "$$src" ] && ! cmp -s "$$src" /ca/root.crt; then
+            cp "$$src" /ca/.root.crt.tmp && chmod 0644 /ca/.root.crt.tmp && mv /ca/.root.crt.tmp /ca/root.crt
+          fi
+          sleep 60 & wait $$!
+        done
+    volumes:
+      - resurgam-caddy-data:/data:ro
+      - resurgam-appliance-ca:/ca
+    network_mode: none
+
+volumes:
+  resurgam-postgres-data:
+  resurgam-caddy-data:
+  resurgam-caddy-config:
+  # Caddy's public root certificate only (written by ca-export, read by backend).
+  resurgam-appliance-ca:

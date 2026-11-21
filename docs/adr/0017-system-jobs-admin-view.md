@@ -1,0 +1,25 @@
+# 0017 — System Jobs: admin view, logs, and cancel/abort across RESURGAM's own job systems
+
+Status: Accepted (2026-09-17)
+
+## Context
+
+The user asked directly for an admin view of "which RESURGAM jobs are ongoing", plus the ability to view logs/responses and abort running jobs. RESURGAM has three separate internal async-work systems by this point, each with its own shape and no shared admin surface: File Restore jobs (list/download, ADR 0013), File Index jobs (ADR 0016, already had its own list+cancel API), and Restore Plan executions (ADR 0014's PVE-side `qmrestore`/`pct restore`, visible only inline in the Restore Center wizard for one plan at a time).
+
+## Decision
+
+**One new admin page (`/administration/system-jobs`), three sections, not one forced-unified table** — the three job shapes are genuinely different (different status vocabularies, different fields), and each needs a different action:
+
+**File Restore jobs** gain their first list endpoint (`GET /file-restore/jobs`, scoped by `visible_customer_ids`) and a cancel endpoint — but only for a job still `pending`. `file_restore_worker.py`'s `_run_job` runs one blocking PBS subprocess call with no checkpoint to observe a cancel flag mid-run (unlike File Index jobs, which checkpoint between directories/batches); true interruption of an already-running job would need a real rework of that worker, not attempted here. A `running` job's real backstop stays the existing TTL/expiry sweep. `"cancelled"` is a new value in the existing free-text `status` column — no migration needed.
+
+**File Index jobs** needed no new backend capability — their list+cancel API already existed (ADR 0016) and already supports cooperative cancellation.
+
+**Restore Plan executions** get a genuinely new, riskier capability: `POST /restore-plans/{id}/execution/abort`, which calls PVE's own `DELETE /nodes/{node}/tasks/{upid}` ("stop a task") on the plan's stored UPID, then marks the plan `restore_failed` with an explicit "aborted by an operator" message — there's no separate "aborted" status; an aborted restore is a failed one, same as any other, so every existing UI/type already knows how to render it. Confirmed live (2026-09-17) against a real PVE 9.2 node that this requires **`Sys.Modify` on the node** — a genuinely broader privilege than every other call this integration makes (all VM/CT-scoped until now), granted explicitly to the `resurgam@pve!dev` role after surfacing that cost directly to the user, given it's a real, hard-to-reverse expansion of what a leaked/misused token could do (not just restore-related). Also confirmed live: calling stop on an already-finished task is safe (`{"data": null}`, not an error) — the endpoint doesn't need to pre-check PVE's own task status first, since a real race (task finishes between the operator's last poll and the abort click) is possible either way. Only offered in the UI while `execution_status` is `restore_requested`/`restore_running` (`finalizing` means the PVE-side restore already finished — nothing left there to stop), and gated behind a typed-VMID confirmation (reusing the existing overwrite-confirm convention from Restore Center) rather than a plain click, given that interrupting a live disk write partway through can leave the target guest's disk in a partially-restored state.
+
+**Frontend**: `SystemJobsPage.tsx` under Administration, each section a `DataTable` with a status badge, a "Details" button opening a `Modal` with the job's logs/response (result entries, error code/message for File Restore; entries indexed, current path, error for File Index; generated command, checks, UPID, execution error for Restore Plan executions), and the appropriate action per row. Restore Plan Executions filters `restorePlansApi.list()` client-side to only plans with a non-null `execution_status` — an unexecuted plan isn't a "job", it's still a draft.
+
+## Consequences
+
+- The `_Custom_RESURGAM` PVE role now carries `Sys.Modify` at the node level, not just VM/CT-scoped privileges — worth remembering if this token's scope is ever audited or narrowed later; it exists specifically to support restore-execution abort.
+- Live-verified against real Sample Customer AG / PVE data: the File Restore and Restore Plan Executions sections both render genuine historical jobs (including, organically, a real PVE 403 from this same session's earlier `SDN.Use` privilege-gap finding, now visible through this view's Details modal) — File Index Jobs showed its correct empty state, since that system's live-tested data lives on the separate dev-VM database, not this one.
+- No abort was exercised against a genuinely in-flight restore in this pass (deliberately — that would mean starting a real restore purely to interrupt it partway through); the underlying PVE call itself was confirmed live and separately (against an already-completed task, and via the granted-privilege re-check), and the abort endpoint's logic is unit-tested, but the full "abort a truly running restore" path has not been exercised end to end against live PVE infrastructure.

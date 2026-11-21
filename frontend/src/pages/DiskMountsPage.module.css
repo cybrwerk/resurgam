@@ -1,0 +1,112 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stepFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 32rem;
+}
+
+.radioColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.connection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.connectionLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Wraps only at the <wbr> after each \ or / (BreakablePath); a single
+   over-long segment may still break, but never shrinks the column per character. */
+.path {
+  overflow-wrap: break-word;
+  word-break: normal;
+  min-width: 0;
+}
+
+.loading {
+  padding: var(--space-4);
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--border);
+  min-width: 0;
+}
+
+.card:last-child {
+  border-block-end: 0;
+}
+
+.cardHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cardTitle {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.inlineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.volumes {
+  margin-block-start: var(--space-4);
+}
+
+.problems {
+  margin: 0 0 var(--space-3);
+  padding-inline-start: var(--space-4);
+}

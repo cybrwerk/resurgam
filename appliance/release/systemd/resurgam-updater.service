@@ -1,0 +1,17 @@
+# Runs queued update requests one at a time (started by
+# resurgam-updater.path). Root on purpose: an apply loads images, restarts
+# the Compose stack and the native workers, and swaps /opt/resurgam/current
+# and /opt/venvs/resurgam-backend. Same code as the console CLI
+# (`resurgam-update`); see /opt/resurgam/current/appliance/UPDATE.md.
+[Unit]
+Description=RESURGAM appliance updater (queued update requests)
+Documentation=file:///opt/resurgam/current/appliance/UPDATE.md
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/resurgam-update process-requests
+# Loading ~1 GB of images, building the venv and waiting for migrations
+# takes minutes, not seconds; a stuck step has its own timeout inside.
+TimeoutStartSec=2h

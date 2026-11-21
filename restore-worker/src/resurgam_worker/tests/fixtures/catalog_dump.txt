@@ -1,0 +1,12 @@
+d "./root.pxar.didx"
+l "./root.pxar.didx/bin"
+d "./root.pxar.didx/boot"
+d "./root.pxar.didx/boot/grub"
+f "./root.pxar.didx/boot/grub/unicode.pf2" 2394108 2023-02-20T06:23:01Z
+d "./root.pxar.didx/dev"
+d "./root.pxar.didx/etc"
+f "./root.pxar.didx/etc/.etckeeper" 61256 2023-09-17T20:22:54Z
+d "./root.pxar.didx/etc/.git"
+f "./root.pxar.didx/etc/.git/HEAD" 23 2023-09-17T20:07:45Z
+d "./root.pxar.didx/etc/.git/hooks"
+f "./root.pxar.didx/etc/.git/hooks/pre-commit" 118 2023-09-17T20:07:45Z

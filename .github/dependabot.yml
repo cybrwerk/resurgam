@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      backend:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: uv
+    directory: /restore-worker
+    schedule:
+      interval: weekly
+    groups:
+      restore-worker:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      frontend:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

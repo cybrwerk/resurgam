@@ -1,0 +1,29 @@
+[Unit]
+Description=RESURGAM Collector scheduler
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=resurgam-worker
+Group=resurgam-worker
+
+# Unlike the two file-restore/file-index workers in this directory, this
+# one needs no elevated privileges at all -- it only makes the same
+# PBS/PVE HTTP calls the manual "Sync" button already triggers
+# (`collector/sync.py`), no local disk/VM access, so no `kvm` group
+# membership or capability grants are needed here.
+EnvironmentFile=-/etc/default/resurgam-collector-scheduler
+ExecStart=/opt/venvs/resurgam-backend/bin/resurgam-collector-scheduler
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=resurgam-collector-scheduler
+
+[Install]
+WantedBy=multi-user.target

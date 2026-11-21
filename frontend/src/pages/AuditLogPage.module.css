@@ -1,0 +1,25 @@
+.loadMoreRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.actorCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.breakglassBadge {
+  flex-shrink: 0;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.searchInput {
+  width: 20rem;
+  max-width: 100%;
+}

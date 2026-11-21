@@ -1,0 +1,242 @@
+import uuid
+
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
+
+from resurgam_api.auth.dependency import get_current_user, require_role
+from resurgam_api.auth.models import AuthenticatedUser
+from resurgam_api.auth.scope import visible_customer_ids
+from resurgam_api.config import Settings, get_settings
+from resurgam_api.db import get_db
+from resurgam_api.errors import ResurgamApiError
+from resurgam_api.models.audit import AuditEvent
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
+from resurgam_api.models.identity import RoleKey
+from resurgam_api.models.secrets import SecretPurpose, SecretReference
+from resurgam_api.models.tenancy import Customer
+from resurgam_api.schemas.datastore import AssignCustomerRequest, DatastoreOut, SetDatastoreEncryptionKeyRequest
+from resurgam_api.secrets.local_provider import LocalEncryptedSecretsProvider
+
+router = APIRouter(prefix="/datastores", tags=["datastores"])
+
+_require_platform_admin = require_role(RoleKey.PLATFORM_ADMIN)
+
+
+def _record_audit(db: Session, request: Request, *, actor_user_id, action: str, target_id, detail=None) -> None:
+    db.add(
+        AuditEvent(
+            actor_user_id=actor_user_id,
+            action=action,
+            target_type="datastore",
+            target_id=str(target_id),
+            correlation_id=getattr(request.state, "correlation_id", None),
+            detail=detail,
+        )
+    )
+
+
+def get_datastore_assignment(db: Session, datastore_id: uuid.UUID) -> DatastoreCustomerAssignment | None:
+    return db.query(DatastoreCustomerAssignment).filter_by(datastore_id=datastore_id).one_or_none()
+
+
+def to_out(db: Session, datastore: Datastore) -> DatastoreOut:
+    assignment = get_datastore_assignment(db, datastore.id)
+    return DatastoreOut(
+        id=datastore.id,
+        pbs_instance_id=datastore.pbs_instance_id,
+        name=datastore.name,
+        path=datastore.path,
+        comment=datastore.comment,
+        created_at=datastore.created_at,
+        customer_id=assignment.customer_id if assignment else None,
+        role=assignment.role if assignment else None,
+        encryption_key_configured=datastore.encryption_key_secret_ref_id is not None,
+        removed_from_pbs_at=datastore.removed_from_pbs_at,
+    )
+
+
+def get_datastore_in_scope_or_404(db: Session, datastore_id: uuid.UUID, user: AuthenticatedUser) -> Datastore:
+    datastore = db.get(Datastore, datastore_id)
+    if datastore is None:
+        raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+
+    visible = visible_customer_ids(user)
+    if visible is not None:
+        assignment = get_datastore_assignment(db, datastore.id)
+        if assignment is None or assignment.customer_id not in visible:
+            # 404, not 403: don't confirm existence of an out-of-scope object.
+            raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+    return datastore
+
+
+@router.get("", response_model=list[DatastoreOut])
+def list_datastores_endpoint(
+    db: Session = Depends(get_db), user: AuthenticatedUser = Depends(get_current_user)
+) -> list[DatastoreOut]:
+    visible = visible_customer_ids(user)
+    datastores = db.query(Datastore).order_by(Datastore.created_at).all()
+
+    if visible is None:
+        return [to_out(db, d) for d in datastores]
+
+    result = []
+    for d in datastores:
+        assignment = get_datastore_assignment(db, d.id)
+        if assignment is not None and assignment.customer_id in visible:
+            result.append(to_out(db, d))
+    return result
+
+
+@router.get("/{datastore_id}", response_model=DatastoreOut)
+def get_datastore(
+    datastore_id: uuid.UUID, db: Session = Depends(get_db), user: AuthenticatedUser = Depends(get_current_user)
+) -> DatastoreOut:
+    return to_out(db, get_datastore_in_scope_or_404(db, datastore_id, user))
+
+
+@router.post("/{datastore_id}/assign-customer", response_model=DatastoreOut)
+def assign_customer(
+    datastore_id: uuid.UUID,
+    body: AssignCustomerRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(_require_platform_admin),
+) -> DatastoreOut:
+    datastore = db.get(Datastore, datastore_id)
+    if datastore is None:
+        raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+
+    if db.get(Customer, body.customer_id) is None:
+        raise ResurgamApiError(code="customer_not_found", message="Customer not found.", status_code=400)
+
+    existing = get_datastore_assignment(db, datastore_id)
+    if existing is not None:
+        existing.customer_id = body.customer_id
+        existing.role = body.role
+    else:
+        db.add(DatastoreCustomerAssignment(datastore_id=datastore_id, customer_id=body.customer_id, role=body.role))
+
+    _record_audit(
+        db,
+        request,
+        actor_user_id=user.user_id,
+        action="datastore_customer_assigned",
+        target_id=datastore_id,
+        detail={"customer_id": str(body.customer_id), "role": body.role},
+    )
+    db.commit()
+    return to_out(db, datastore)
+
+
+@router.post("/{datastore_id}/unassign-customer", response_model=DatastoreOut)
+def unassign_customer(
+    datastore_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user=Depends(_require_platform_admin)
+) -> DatastoreOut:
+    datastore = db.get(Datastore, datastore_id)
+    if datastore is None:
+        raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+
+    existing = get_datastore_assignment(db, datastore_id)
+    if existing is not None:
+        db.delete(existing)
+
+    _record_audit(
+        db, request, actor_user_id=user.user_id, action="datastore_customer_unassigned", target_id=datastore_id
+    )
+    db.commit()
+    return to_out(db, datastore)
+
+
+@router.delete("/{datastore_id}", status_code=204)
+def delete_datastore(
+    datastore_id: uuid.UUID, request: Request, db: Session = Depends(get_db), user=Depends(_require_platform_admin)
+) -> None:
+    datastore = db.get(Datastore, datastore_id)
+    if datastore is None:
+        raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+
+    _record_audit(db, request, actor_user_id=user.user_id, action="datastore_deleted", target_id=datastore_id)
+    db.delete(datastore)
+    db.commit()
+
+
+@router.post("/{datastore_id}/encryption-key", response_model=DatastoreOut)
+def set_datastore_encryption_key(
+    datastore_id: uuid.UUID,
+    body: SetDatastoreEncryptionKeyRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    user=Depends(_require_platform_admin),
+) -> DatastoreOut:
+    """PBS's own client-side backup encryption (docs/adr/0022) means an
+    encrypted backup is unreadable to RESURGAM's own direct
+    `proxmox-backup-client`/`proxmox-file-restore` calls (Recovery Lab,
+    `guest_exec_ephemeral`, `external_mount` indexing, file-browsing)
+    without the exact keyfile PBS used to encrypt it -- PBS itself never
+    stores that key in a recoverable form. Create-or-rotate: mirrors
+    `pbs_instances.create_pbs_instance`'s secret-store shape exactly, one
+    `SecretReference`/`LocalSecretValue` pair per datastore, replaced in
+    place on a second call rather than accumulating orphaned rows.
+    """
+    datastore = db.get(Datastore, datastore_id)
+    if datastore is None:
+        raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+
+    provider = LocalEncryptedSecretsProvider(db, settings.secrets_local_encryption_key)
+
+    if datastore.encryption_key_secret_ref_id is not None:
+        secret_ref = db.get(SecretReference, datastore.encryption_key_secret_ref_id)
+        provider.store(secret_ref.reference_key, body.keyfile_content)
+    else:
+        reference_key = f"datastore-encryption-key-{uuid.uuid4()}"
+        secret_ref = SecretReference(
+            reference_key=reference_key,
+            description=f"PBS encryption keyfile for datastore '{datastore.name}'",
+            purpose=SecretPurpose.PBS_ENCRYPTION_KEY,
+        )
+        db.add(secret_ref)
+        db.flush()
+        provider.store(reference_key, body.keyfile_content)
+        datastore.encryption_key_secret_ref_id = secret_ref.id
+
+    _record_audit(
+        db, request, actor_user_id=user.user_id, action="datastore_encryption_key_set", target_id=datastore_id
+    )
+    db.commit()
+    db.refresh(datastore)
+    return to_out(db, datastore)
+
+
+@router.delete("/{datastore_id}/encryption-key", response_model=DatastoreOut)
+def delete_datastore_encryption_key(
+    datastore_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    user=Depends(_require_platform_admin),
+) -> DatastoreOut:
+    datastore = db.get(Datastore, datastore_id)
+    if datastore is None:
+        raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
+    if datastore.encryption_key_secret_ref_id is None:
+        raise ResurgamApiError(
+            code="no_encryption_key", message="This datastore has no encryption key configured.", status_code=400
+        )
+
+    secret_ref = db.get(SecretReference, datastore.encryption_key_secret_ref_id)
+    reference_key = secret_ref.reference_key
+
+    datastore.encryption_key_secret_ref_id = None
+    _record_audit(
+        db, request, actor_user_id=user.user_id, action="datastore_encryption_key_removed", target_id=datastore_id
+    )
+    db.flush()
+
+    provider = LocalEncryptedSecretsProvider(db, settings.secrets_local_encryption_key)
+    provider.delete(reference_key)
+    db.delete(secret_ref)
+
+    db.commit()
+    db.refresh(datastore)
+    return to_out(db, datastore)

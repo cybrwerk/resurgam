@@ -1,0 +1,172 @@
+.calendar {
+  max-width: 24rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.navButton {
+  padding: 0.25rem 0.5rem;
+}
+
+.chevronLeft {
+  transform: rotate(90deg);
+}
+
+.chevronRight {
+  transform: rotate(-90deg);
+}
+
+.monthLabel {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.weekdayRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 0.25rem;
+}
+
+.weekdayLabel {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+}
+
+.cellBlank {
+  aspect-ratio: 1;
+}
+
+.cellEmpty {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.cell:hover {
+  background: color-mix(in srgb, var(--color-petrol-700) 12%, var(--surface-panel));
+}
+
+.cellSelected {
+  border-color: var(--color-petrol-700);
+  font-weight: 600;
+}
+
+.cellOpen {
+  outline: 2px solid var(--color-petrol-700);
+  outline-offset: -2px;
+}
+
+.cellDayNumber {
+  line-height: 1;
+}
+
+.cellDot {
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  background: var(--color-petrol-700);
+}
+
+.cellDotIndexed {
+  background: var(--status-success);
+}
+
+.cellDotIndexable {
+  background: var(--status-warning);
+}
+
+.legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legendDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dayPicklistDot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-petrol-700);
+}
+
+.dayPicklist {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.dayPicklistItems {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+
+.dayPicklistRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.dayPicklistRow:hover {
+  background: var(--surface-raised);
+}
+
+.dayPicklistRowSelected {
+  background: var(--surface-raised);
+  font-weight: 600;
+}

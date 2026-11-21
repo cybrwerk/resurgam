@@ -1,0 +1,136 @@
+/* System Settings -> Updates (UpdatesPanel.tsx, ADR 0024). Tokens only. */
+
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.alert {
+  margin-block: var(--space-2);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-3);
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block: var(--space-2);
+}
+
+.progressRow progress {
+  flex: 1;
+  max-inline-size: 32rem;
+  block-size: 10px;
+  accent-color: var(--primary);
+}
+
+.subTitle {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.changelog {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  max-block-size: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.steps {
+  list-style: none;
+  margin: var(--space-2) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.log {
+  margin-block-start: var(--space-3);
+}
+
+.log summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.log pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  max-block-size: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.confirmBox {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border-inline-start: 3px solid var(--accent);
+  background: var(--surface-2);
+}
+
+.confirmBox p {
+  margin: 0 0 var(--space-2);
+}
+
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Update source (UpdateSourcePanel.tsx, ADR 0026). */
+.flush {
+  margin: 0;
+}
+
+/* Version + publish date stay together and readable on narrow screens. */
+.releaseVersion {
+  min-inline-size: 7rem;
+}
+
+/* Themed link colour (readable in dark mode), not the browser default. */
+.releaseLink,
+.releaseLink:visited {
+  color: var(--primary);
+}
+
+.wrapAnywhere {
+  overflow-wrap: anywhere;
+}
+
+/* "0.2.8 available" next to the installed version. */
+.versionLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}

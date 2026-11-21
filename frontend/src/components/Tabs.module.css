@@ -1,0 +1,68 @@
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 1rem;
+}
+
+.list {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* Phones and tablets (768px leaves ~550px beside the sidebar): every tab
+   stays visible, wrapping onto a second row, instead of hiding off the edge
+   of a sideways-scrolling strip. */
+@media (max-width: 1024px) {
+  .list {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .tab {
+    padding-inline: 0.7rem;
+  }
+}
+
+.tab {
+  padding: 0.55rem 0.95rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tabActive {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+  padding-bottom: 0.4rem;
+}
+
+.panel:focus-visible {
+  outline: none;
+}

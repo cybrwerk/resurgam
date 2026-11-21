@@ -1,0 +1,32 @@
+.createPanel {
+  margin-bottom: 1rem;
+}
+
+.alert {
+  margin-bottom: 1rem;
+}
+
+/* Two-column field grid for the edit form inside the (narrow) Modal. */
+.modalForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+}
+
+.modalForm :global(.formActions),
+.fullRow {
+  grid-column: 1 / -1;
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Phones: one column -- two columns leave long labels wrapping to three lines
+   and selects truncated. */
+@media (max-width: 560px) {
+  .modalForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

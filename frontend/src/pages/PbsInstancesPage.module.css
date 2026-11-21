@@ -1,0 +1,81 @@
+/* Also imported by PveClustersPage, whose create form and fingerprint
+   probe are identical -- check both pages before removing a class. */
+
+.createForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+  max-width: 40rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Combined with .createForm (not a replacement) for a form shown in a
+   Modal size="large" -- lets it actually use the wider modal instead of
+   still capping out at .createForm's own default width. */
+.createFormWide {
+  max-width: 48rem;
+}
+
+.sectionSubtitle {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.alert {
+  margin-bottom: 1rem;
+}
+
+.fingerprintRow {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.fingerprintValue {
+  font-family: var(--resurgam-font-mono);
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Narrow screens: inside the pinned, width-capped actions column. */
+@media (max-width: 1024px) {
+  .rowActions {
+    flex-wrap: wrap;
+  }
+}
+
+/* --- PbsInstancesPage's own (2026-10-04 OPNsense pass) --- */
+
+/* On-page "Add PBS instance" panel, shown above the list. */
+.createPanel {
+  margin-bottom: 1rem;
+}
+
+/* Modal forms keep the two-column .createForm grid (the default modal is
+   too narrow for the label-left .formGrid layout); the global action bar
+   spans both columns. */
+.createForm :global(.formActions) {
+  grid-column: 1 / -1;
+}
+
+.modalDetails {
+  margin-bottom: 1rem;
+}
+
+.remotesPanel {
+  margin-top: 0.5rem;
+}
+
+/* Phones: one column -- two columns leave long labels wrapping to three lines
+   and selects truncated. */
+@media (max-width: 560px) {
+  .createForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

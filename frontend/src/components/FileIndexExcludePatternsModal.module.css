@@ -1,0 +1,60 @@
+.hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.alert {
+  margin-bottom: 1rem;
+}
+
+.labelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.labelRow .label {
+  margin-bottom: 0;
+}
+
+.textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--resurgam-font-mono);
+  font-size: 0.8rem;
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.modalFooterActions {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.methodSection {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.methodSection .formActions {
+  margin-top: 0.75rem;
+}
+
+/* "Insert recommended defaults" may wrap rather than run out of the dialog. */
+.labelRow :global(.button) {
+  white-space: normal;
+  height: auto;
+  min-height: var(--control-height);
+  text-align: center;
+}

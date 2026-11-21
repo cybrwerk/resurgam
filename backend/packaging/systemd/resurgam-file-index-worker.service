@@ -1,0 +1,33 @@
+[Unit]
+Description=RESURGAM file-index worker
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=resurgam-worker
+Group=resurgam-worker
+SupplementaryGroups=kvm
+
+EnvironmentFile=-/etc/default/resurgam-file-index-worker
+ExecStart=/opt/venvs/resurgam-backend/bin/resurgam-file-index-worker
+Restart=on-failure
+RestartSec=5s
+
+# Same privilege boundary as resurgam-file-restore-worker.service (this worker's VM indexing
+# calls the identical `proxmox-file-restore list` primitive at depth) -- see that unit's comment:
+# no capabilities, only the kvm group and the two writable directories below. Kept identical
+# deliberately: the two workers share one privilege boundary, not two independently guessed ones.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=-/run/proxmox-backup -/var/log/proxmox-backup/file-restore
+StateDirectory=resurgam-file-index-worker
+
+[Install]
+WantedBy=multi-user.target

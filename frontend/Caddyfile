@@ -1,0 +1,46 @@
+# Manifest §5.3: reverse proxy as a container, fronting both the built
+# UI and the API on one origin -- same-origin means the frontend needs
+# no CORS config at all (see VITE_API_BASE_URL="/api/v1" in Dockerfile).
+#
+# Defaults to a self-signed cert ("tls internal") so this works out of
+# the box on a private/internal appliance network with no public DNS --
+# raised directly by the user's own framing of RESURGAM as something an
+# admin reaches without needing direct PBS/PVE network access, the same
+# reasoning applies to reaching RESURGAM itself. For a real public
+# deployment with a real domain: set RESURGAM_DOMAIN and delete the
+# "tls internal" line below to let Caddy provision a real Let's Encrypt
+# certificate automatically instead.
+#
+# default_sni: browsers send no SNI at all when RESURGAM_DOMAIN is a bare
+# IP, and Caddy's fallback (match the address the connection arrived on)
+# sees this container's own Docker-network IP, not the appliance's --
+# so without this, a bare-IP deployment fails every TLS handshake.
+{
+	default_sni {$RESURGAM_DOMAIN:localhost}
+}
+
+{$RESURGAM_DOMAIN:localhost} {
+	tls internal
+
+	encode gzip
+
+	# Safe hardening headers for UI and API alike. `?` = only when the
+	# response does not set the header itself (e.g. the API's stricter
+	# headers on /api/v1/branding/logo win). No script Content-Security-Policy
+	# here: it would need verifying against every page of the built app.
+	# One directive per header: a combined block would only set any of them
+	# when none is present.
+	header ?X-Content-Type-Options nosniff
+	header ?Referrer-Policy strict-origin-when-cross-origin
+	header ?X-Frame-Options DENY
+
+	handle /api/* {
+		reverse_proxy backend:8001
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,166 @@
+/* Recovery Lab compute setup wizard (LabComputeSetup.tsx). Tokens only. */
+
+.alert {
+  margin-block-end: var(--space-3);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+
+.readinessList {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.readinessRow {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.readinessRow + .readinessRow {
+  border-block-start: 1px solid var(--border);
+}
+
+.readinessTitle {
+  font-weight: 600;
+}
+
+.nodeGroup {
+  border: 0;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+}
+
+.nodeGroup legend {
+  margin-block-end: var(--space-1);
+}
+
+.nodeGroup p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.checkOption {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.fixes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+
+.confirmBox {
+  padding: var(--space-2) var(--space-3);
+  border-inline-start: 3px solid var(--accent);
+  background: var(--surface-2);
+}
+
+.confirmBox p {
+  margin: 0 0 var(--space-2);
+}
+
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-1);
+}
+
+.agentSteps {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  margin-block: var(--space-1);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* A one-line command (pairing): wrap instead of scrolling sideways. */
+.wrapCode {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* An <a class="button">: no link underline. */
+.linkButton {
+  text-decoration: none;
+}
+
+.subSection {
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--border);
+}
+
+.subTitle {
+  margin: 0 0 var(--space-1);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.sshForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block: var(--space-2);
+}
+
+.keyInput {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  min-block-size: 6rem;
+  resize: vertical;
+}
+
+.fieldError {
+  margin: 0;
+  color: var(--crit);
+  font-size: 13px;
+}
+
+.jobLog {
+  margin-block-start: var(--space-3);
+}
+
+.jobLog details summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+
+@media (max-width: 40rem) {
+  .readinessRow {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}

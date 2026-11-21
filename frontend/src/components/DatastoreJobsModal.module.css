@@ -1,0 +1,64 @@
+.form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+  max-width: 40rem;
+  margin-bottom: 1rem;
+}
+
+.keepGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 1rem;
+}
+
+.checkboxRow {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.formActions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.modalFooterActions {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.sectionSubtitle {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.alert {
+  margin-bottom: 1rem;
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.fieldHint {
+  margin: var(--space-1) 0 0;
+}
+
+/* Phones: one column -- two columns leave long labels wrapping to three lines
+   and selects truncated. */
+@media (max-width: 560px) {
+  .form,
+  .keepGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

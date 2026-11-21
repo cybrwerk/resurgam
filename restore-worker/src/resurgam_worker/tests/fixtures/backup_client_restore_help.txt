@@ -1,0 +1,72 @@
+Usage: restore <snapshot> <archive-name> <target> [OPTIONS]
+
+Restore backup repository.
+
+ <snapshot> <string>
+             Group/Snapshot path.
+
+ <archive-name> <string>
+             Backup archive name.
+
+ <target>   <string>
+             Target directory path. Use '-' to write to standard output.
+
+             We do not extract '.pxar' archives when writing to standard output.
+
+Optional parameters:
+
+ --allow-existing-dirs <boolean>   (default=false)
+             Do not fail if directories already exists.
+ --auth-id  <string>
+             Authentication ID
+ --burst    <string>
+             Size of the token bucket (for Token bucket filter) in bytes with
+             optional unit (B, KB (base 10), MB, GB, ..., KiB (base 2), MiB,
+             Gib, ...).
+ --crypt-mode none|encrypt|sign-only   (default=encrypt)
+             Defines whether data is encrypted (using an AEAD cipher), only
+             signed, or neither.
+ --datastore <string>
+             Datastore name.
+ --ignore-acls <boolean>   (default=false)
+             ignore acl settings
+ --ignore-extract-device-errors <boolean>   (default=false)
+             ignore errors that occur during device node extraction
+ --ignore-missing-signature <boolean>   (default=false)
+             Read a backup whose manifest has no signature even though an
+             encryption key is configured. The backup's integrity cannot be
+             verified in that case.
+ --ignore-ownership <boolean>   (default=false)
+             ignore owner settings (no chown)
+ --ignore-permissions <boolean>   (default=false)
+             ignore permission settings (no chmod)
+ --ignore-xattrs <boolean>   (default=false)
+             ignore xattr settings
+ --keyfd    <integer> (0 - N)
+             Pass an encryption key via an already opened file descriptor.
+ --keyfile  <string>
+             Path to encryption key. All data will be encrypted using this key.
+ --ns       <string>
+             Namespace.
+ --overwrite <boolean>   (default=false)
+             overwrite already existing files
+ --overwrite-files <boolean>   (default=false)
+             overwrite already existing files
+ --overwrite-hardlinks <boolean>   (default=false)
+             overwrite already existing entries by archives hardlink
+ --overwrite-symlinks <boolean>   (default=false)
+             overwrite already existing entries by archives symlink
+ --pattern  <string>
+             Path or match pattern to limit files that get restored. Can be
+             specified more than once.
+ --port     <integer> (1 - 65535)   (default=8007)
+             Backup server port. Default: 8007
+ --prelude-target <string>
+             Path to restore prelude to, (pxar v2 archives only).
+ --rate     <string>
+             Rate limit (for Token bucket filter) in bytes/s with optional unit
+             (B, KB (base 10), MB, GB, ..., KiB (base 2), MiB, Gib, ...).
+ --repository <string>
+             Repository URL: [[auth-id@]server[:port]:]datastore
+ --server   <string>
+             Backup server address (hostname or IP). Default: localhost

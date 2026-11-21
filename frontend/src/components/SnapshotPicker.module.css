@@ -1,0 +1,38 @@
+.pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.pickers .field {
+  min-width: 16rem;
+  margin-bottom: 0;
+}
+
+.emptyHint {
+  font-size: 0.78rem;
+  margin: 0.3rem 0 0;
+}
+
+.snapshotField {
+  flex-basis: 100%;
+  min-width: 100%;
+}
+
+.snapshotHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.viewToggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.viewToggleActive {
+  background: var(--surface-raised);
+  font-weight: 600;
+}

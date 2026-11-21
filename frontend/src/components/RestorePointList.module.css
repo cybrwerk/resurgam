@@ -1,0 +1,9 @@
+.list {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.selectedRow {
+  background: var(--surface-raised);
+  font-weight: 600;
+}

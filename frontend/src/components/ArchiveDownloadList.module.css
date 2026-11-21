@@ -1,0 +1,58 @@
+.list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.item {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+
+.detail {
+  margin: 0.35rem 0 0;
+}
+
+.error {
+  color: var(--crit);
+}
+
+.details {
+  margin-block-start: 0.35rem;
+}
+
+.details summary {
+  cursor: pointer;
+}
+
+.entryList {
+  margin: 0.25rem 0 0;
+  padding-inline-start: 1.1rem;
+  max-height: 10rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}

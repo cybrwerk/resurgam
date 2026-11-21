@@ -1,0 +1,46 @@
+Source: resurgam-worker
+Section: admin
+Priority: optional
+Maintainer: RESURGAM <noreply@resurgam.invalid>
+Build-Depends: debhelper-compat (= 13), dh-virtualenv (>= 1.2), python3-dev, python3-venv
+Standards-Version: 4.6.2
+Homepage: https://github.com/resurgam/resurgam
+Rules-Requires-Root: no
+
+Package: resurgam-lab-agent
+Architecture: amd64
+Depends: ${misc:Depends}, ${shlibs:Depends}, proxmox-backup-client, qemu-server, qemu-utils
+Description: RESURGAM Recovery Lab probe agent
+ Installed on a PVE cluster designated for Recovery Lab use (manifest
+ EPIC 10, ADR 0019). Polls RESURGAM's backend over an outbound-only
+ HTTPS backchannel for Application Group members ready to test, maps
+ each one's PBS snapshot directly as a local block device
+ (`proxmox-backup-client map` -- zero-copy, no restore), overlays a
+ writable COW layer so the guest can boot without ever touching the
+ real backup image, and starts a VM around it via `qm` -- proving a
+ backup's recoverability without paying the cost of a full restore.
+ .
+ Never opens an inbound port and never touches the RESURGAM database
+ directly; the only network paths it needs are outbound HTTPS to the
+ RESURGAM backend and outbound access to its own locally-configured PBS
+ instance(s) on port 8007.
+ .
+ Also carries the write-side of a second Phase B responsibility: this
+ same host writes each Lab run's probe appliance cloud-init snippet to
+ local disk, since PVE has no REST endpoint to upload one (confirmed
+ live 2026-09-21).
+
+Package: resurgam-lab-prober
+Architecture: amd64
+Depends: ${misc:Depends}, ${shlibs:Depends}, iproute2, iputils-ping, dnsmasq, nftables, nmap
+Description: RESURGAM Recovery Lab probe appliance
+ Recovery Lab's per-run probe appliance (manifest EPIC 10, ADR 0019,
+ Phase B) -- cloned fresh for each Lab run, dual-homed onto the run's
+ isolated PVE SDN Lab VNet (net0) and an existing uplink bridge (net1).
+ Acts as that VNet's own router/DHCP server/firewall/SNAT gateway
+ (dnsmasq + nftables, entirely self-contained in this VM -- PVE itself
+ never provisions a subnet on the Lab VNet), and runs the 3-tier probe
+ hierarchy's Level 2 (`icmp`/`arp`) and Level 3 (`tcp_port`/`http`/
+ `https`/`dns`/`tls_handshake`/`ssh_banner`/`nmap_scan`) checks against
+ each restored member over that segment, reporting results back to
+ RESURGAM's backend over its own outbound HTTPS path (net1).

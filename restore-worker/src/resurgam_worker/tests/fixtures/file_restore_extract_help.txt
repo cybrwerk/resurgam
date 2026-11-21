@@ -1,0 +1,49 @@
+Usage: extract <snapshot> <path> [<target>] [OPTIONS]
+
+Restore files from a backup snapshot.
+
+ <snapshot> <string>
+             Group/Snapshot path.
+
+ <path>     <string>
+             Path to restore. Directories will be restored as archive files if
+             extracted to stdout.
+
+ <target>   <string>
+             Target directory path. Use '-' to write to standard output.
+
+Optional parameters:
+
+ --auth-id  <string>
+             Authentication ID
+ --base64   <boolean>   (default=false)
+             If set, 'path' will be interpreted as base64 encoded.
+ --crypt-mode none|encrypt|sign-only   (default=encrypt)
+             Defines whether data is encrypted (using an AEAD cipher), only
+             signed, or neither.
+ --datastore <string>
+             Datastore name.
+ --driver   Qemu
+             The block driver type to use.
+ --format   plain|pxar|zip|tar
+             The desired format of the result.
+ --ignore-missing-signature <boolean>   (default=false)
+             Read a backup whose manifest has no signature even though an
+             encryption key is configured. The backup's integrity cannot be
+             verified in that case.
+ --keyfd    <integer> (0 - N)
+             Pass an encryption key via an already opened file descriptor.
+ --keyfile  <string>
+             Path to encryption key. All data will be encrypted using this key.
+ --ns       <string>
+             Namespace.
+ --port     <integer> (1 - 65535)   (default=8007)
+             Backup server port. Default: 8007
+ --repository <string>
+             Repository URL: [[auth-id@]server[:port]:]datastore
+ --server   <string>
+             Backup server address (hostname or IP). Default: localhost
+ --verbose  <boolean>   (default=false)
+             Print verbose information
+ --zstd     <boolean>   (default=false)
+             If true, output will be zstd compressed.

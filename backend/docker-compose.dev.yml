@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: resurgam
+      POSTGRES_PASSWORD: resurgam-dev-only
+      POSTGRES_DB: resurgam
+    ports:
+      - "55432:5432"
+    volumes:
+      - resurgam-backend-postgres-dev:/var/lib/postgresql/data
+
+volumes:
+  resurgam-backend-postgres-dev:

@@ -1,0 +1,22 @@
+# Debian packages the RESURGAM appliance host needs (ADR 0024, "Host packages and the host-setup
+# hook"). One package name per line. Installed by host-setup.sh -- from download.proxmox.com when the
+# image is built (--online), from the update bundle's own host-packages/ repository on updates.
+#
+# The file-restore/file-index workers run every PBS CLI call natively on the host (ADR 0013), and
+# ADR 0011 found that the VM path only works reliably when all four tools come from ONE co-tested
+# Proxmox repository release matching the Debian release -- on Debian 13 (trixie) that is the
+# Proxmox VE "pve-no-subscription" repository, the only one that carries pve-qemu-kvm. Don't mix in
+# the PBS-only or pbs-client repositories.
+
+# Its keyring package: keeps /usr/share/keyrings/proxmox-archive-keyring.gpg (Signed-By of the
+# Proxmox apt source host-setup.sh writes) current, and installs it offline on bundle updates.
+proxmox-archive-keyring
+# CT/host backups: catalog browsing + single-file restore (pxar).
+proxmox-backup-client
+# VM backups: proxmox-file-restore, the micro-VM image it boots, and the QEMU that runs it.
+proxmox-backup-file-restore
+proxmox-backup-restore-image
+pve-qemu-kvm
+# proxmox-backup-file-restore's postinst builds the micro-VM initramfs with cpio but doesn't depend on
+# it (found installing into a minimal Debian 13); Debian's cloud image happens to ship it.
+cpio

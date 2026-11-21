@@ -1,0 +1,229 @@
+/* Petrol & Brass SideNav (pb-nav): deep petrol below the top bar. Items get
+   nav-bg-2 on hover; the section holding the current page also gets a 3px
+   brass edge on its inline-start side and semibold text. Logical properties
+   only. */
+
+.nav {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--nav-bg);
+  color: var(--nav-fg);
+  overflow-y: auto;
+  transition: width var(--transition-fast);
+}
+
+.sections {
+  list-style: none;
+  margin: 0;
+  padding-block: 10px;
+  padding-inline: 0;
+  flex: 1;
+}
+
+.sectionItem {
+  position: relative;
+}
+
+/* pb-nav-item */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding-block: 8px;
+  padding-inline: 13px 14px;
+  border: none;
+  border-inline-start: 3px solid transparent;
+  background: none;
+  color: var(--nav-fg);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sectionHeader:hover {
+  background: var(--nav-bg-2);
+}
+
+/* The section holding the current page keeps the brass edge even while the
+   user has another section opened -- you always see where you are. */
+.sectionHeaderActive {
+  background: var(--nav-bg-2);
+  border-inline-start-color: var(--accent);
+  font-weight: 600;
+}
+
+.sectionIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.sectionLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron,
+.chevronOpen {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--nav-muted);
+  transition: transform var(--transition-fast);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* pb-nav-sub */
+.children {
+  list-style: none;
+  margin: 0;
+  padding-block: 2px 6px;
+  padding-inline: 0;
+}
+
+.childLink {
+  display: block;
+  padding-block: 5px;
+  padding-inline: 39px 14px;
+  font-size: 14px;
+  color: var(--nav-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.childLink:hover {
+  color: var(--nav-fg);
+}
+
+.childLinkActive {
+  color: var(--nav-fg);
+  font-weight: 600;
+}
+
+.railToggle {
+  composes: sectionHeader;
+  flex-shrink: 0;
+  border-block-start: 1px solid var(--nav-bg-2);
+  color: var(--nav-muted);
+  font-size: 13px;
+  padding-block: 10px;
+}
+
+/* --- Icon rail (RESURGAM extension; Petrol & Brass has no rail) ---------- */
+
+.rail {
+  width: var(--sidebar-rail-width);
+  /* Flyouts are positioned outside the rail, so it must not clip them;
+     eight icons always fit without scrolling. */
+  overflow: visible;
+}
+
+.rail .sectionLabel,
+.rail .chevron,
+.rail .chevronOpen {
+  display: none;
+}
+
+.rail .sectionHeader {
+  justify-content: center;
+  padding-inline: 0 3px;
+}
+
+.rail .children {
+  display: none;
+  position: absolute;
+  inset-inline-start: 100%;
+  top: 0;
+  z-index: 30;
+  min-width: 13rem;
+  padding-block: 4px;
+  background: var(--nav-bg);
+  border: 1px solid var(--nav-bg-2);
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  box-shadow: var(--shadow-toast);
+}
+
+.rail .sectionItem:hover .children,
+.rail .sectionItem:focus-within .children {
+  display: block;
+}
+
+.rail .flyoutTitle {
+  display: block;
+  padding-block: 6px;
+  padding-inline: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+}
+
+.rail .childLink {
+  padding-inline: 14px;
+}
+
+/* --- Narrow screens: slide in from the inline-start edge ----------------- */
+
+@media (max-width: 760px) {
+  .nav {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 25;
+    width: var(--sidebar-width);
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform var(--transition-fast);
+  }
+
+  :global([dir="rtl"]) .nav {
+    transform: translateX(100%);
+  }
+
+  .nav.mobileOpen {
+    transform: none;
+  }
+
+  /* The rail is a desktop affordance; on a phone the slide-in is always full. */
+  .rail .sectionLabel,
+  .rail .chevron,
+  .rail .chevronOpen {
+    display: initial;
+  }
+
+  .rail .sectionHeader {
+    justify-content: flex-start;
+    padding-inline: 13px 14px;
+  }
+
+  .rail .children {
+    position: static;
+    display: block;
+    min-width: 0;
+    box-shadow: none;
+    border: none;
+  }
+
+  .rail .childLink {
+    padding-inline: 39px 14px;
+  }
+
+  .rail .flyoutTitle,
+  .railToggle {
+    display: none;
+  }
+}

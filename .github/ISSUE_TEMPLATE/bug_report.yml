@@ -1,0 +1,78 @@
+name: Bug report
+description: Something in RESURGAM doesn't work as expected
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Security problems go to [private vulnerability reporting](https://github.com/cybrwerk/resurgam/security/advisories/new), not here.**
+        Please remove real hostnames, IPs, tokens and customer names from logs and screenshots before posting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error ...
+    validations:
+      required: true
+  - type: input
+    id: resurgam-version
+    attributes:
+      label: RESURGAM version
+      description: Administration → System Settings → Updates, or the `VERSION` file.
+      placeholder: "0.2.8"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is RESURGAM installed?
+      options:
+        - Appliance image (qcow2)
+        - Manual install (appliance/DEPLOY.md)
+        - Development setup
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: pbs-version
+    attributes:
+      label: Proxmox Backup Server version(s)
+      placeholder: "4.2.x"
+  - type: input
+    id: pve-version
+    attributes:
+      label: Proxmox VE version(s)
+      placeholder: "9.2.x"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Inventory / Collector sync
+        - Backups / Jobs / History
+        - File restore / File index
+        - Restore Center
+        - Disk Mounts
+        - Recovery Lab
+        - Reports / Recovery Evidence
+        - Users, roles, SSO, MFA
+        - Billing / Pricing
+        - Appliance / Updates
+        - Web UI / Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Browser console, `docker compose logs backend`, or `journalctl -u resurgam-*`. Redact sensitive values.
+      render: text

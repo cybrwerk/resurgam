@@ -1,0 +1,33 @@
+.rowActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Backup Jobs: four row actions in a compact 2x2 grid, so the actions
+   column fits at 1280px next to the customer select. */
+.compactRowActions {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: var(--space-1);
+}
+
+.compactRowActions :global(.button) {
+  height: 26px;
+  padding-inline: var(--space-2);
+  font-size: 12px;
+}
+
+.linkList {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Run-now failure under the header. */
+.alert {
+  margin-block-end: var(--space-3);
+}

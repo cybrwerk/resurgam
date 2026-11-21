@@ -1,0 +1,232 @@
+/* RESURGAM design tokens -- cybrwerk "Petrol & Brass" design system
+   (https://claude.ai/artifact/Fevtmk5Qq6LQyGiVSWC6dG, tokens.json v1),
+   aligned 2026-10-04. Token names and values follow that system exactly;
+   docs/design/RESURGAM-Styleguide.md says where RESURGAM extends it.
+
+   White-label branding (Administration -> System Settings) sets
+   --brand-primary / --brand-accent (and derived --brand-* variants, see
+   BrandingContext) on the root element only when an admin configured a
+   colour; otherwise every fallback below is the Petrol & Brass default. */
+
+:root {
+  color-scheme: light;
+
+  /* --- Petrol & Brass colour tokens (light) --- */
+  --bg: #f4f6f6;
+  --surface: #ffffff;
+  --surface-2: #eef2f2;
+  --border: #d5dddd;
+  --border-strong: #768a8d;
+  --text: #1c2526;
+  --muted: #536163;
+
+  --primary: var(--brand-primary, #005f6b);
+  --on-primary: #ffffff;
+  --primary-soft: var(--brand-primary-soft, #e1eff1);
+
+  --nav-bg: var(--brand-nav-bg, #003a42);
+  --nav-bg-2: var(--brand-nav-bg-2, #00474f);
+  --nav-fg: #dbe7e8;
+  --nav-muted: #93b4b8;
+
+  --accent: var(--brand-accent, #b08d57);
+  --on-accent: #1c1608;
+  --accent-text: var(--brand-accent-text, #7a5c1e);
+  --accent-soft: #f6eedf;
+
+  --ok: #2a7549;
+  --ok-soft: #e3f2e9;
+  --warn: #9a6200;
+  --warn-soft: #fbf0dc;
+  --crit: #b3261e;
+  --crit-soft: #fbe5e3;
+
+  --series-a: #2a8a96;
+  --series-b: var(--accent);
+  --grid: #e3e9e9;
+
+  /* --- type --- */
+  --font-sans: "Helvetica Neue", Helvetica, "TeX Gyre Heros", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* --- spacing, radius, shadow, size --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-pill: 999px;
+
+  --shadow-1: 0 1px 2px rgba(0, 40, 46, 0.08);
+  --shadow-toast: 0 6px 20px rgba(0, 40, 46, 0.18);
+
+  --control-height: 30px;
+  --topbar-height: 52px;
+  --sidebar-width: 220px;
+  --focus-ring: 2px;
+
+  /* --- RESURGAM extensions --- */
+  --sidebar-rail-width: 56px; /* collapsed icon rail (not part of Petrol & Brass) */
+  --transition-fast: 120ms ease;
+
+  /* --- legacy aliases ---
+     Names the page stylesheets were written against, pointed at the
+     Petrol & Brass tokens so every page follows the system. New code uses
+     the token names above. */
+  --surface-page: var(--bg);
+  --surface-panel: var(--surface);
+  --surface-raised: var(--surface-2);
+  --border-default: var(--border);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --color-petrol-700: var(--primary);
+  --color-petrol-600: var(--primary);
+  --color-petrol-400: var(--series-a);
+  --color-brass-600: var(--accent);
+  --color-brass-400: var(--accent);
+  --color-bordeaux-600: var(--crit);
+  --accent-strong: var(--primary);
+  --status-success: var(--ok);
+  --status-warning: var(--warn);
+  --status-critical: var(--crit);
+  --status-progress: var(--primary);
+  --status-stale: var(--muted);
+  --radius-control: var(--radius-md);
+  --radius-panel: var(--radius-md);
+  --header-height: var(--topbar-height);
+  --sidebar-bg: var(--nav-bg);
+  --sidebar-open: var(--nav-bg);
+  --sidebar-hover: var(--nav-bg-2);
+  --sidebar-active: var(--nav-bg-2);
+  --sidebar-divider: var(--nav-bg-2);
+  --sidebar-text: var(--nav-fg);
+  --sidebar-muted: var(--nav-muted);
+  --resurgam-focus: 0 0 0 var(--focus-ring) var(--accent);
+  --resurgam-shadow-sm: var(--shadow-1);
+  --resurgam-shadow-modal: var(--shadow-toast);
+  --resurgam-font-sans: var(--font-sans);
+  --resurgam-font-mono: var(--font-mono);
+}
+
+/* --- Petrol & Brass colour tokens (dark) --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0f1718;
+    --surface: #172224;
+    --surface-2: #1d2a2c;
+    --border: #2b3b3e;
+    --border-strong: #64797c;
+    --text: #e3e8e8;
+    --muted: #9fb0b2;
+    --primary: var(--brand-primary-on-dark, #5fb7c2);
+    --on-primary: #0f1718;
+    --primary-soft: var(--brand-primary-soft-dark, #183a3f);
+    --nav-bg: var(--brand-nav-bg-dark, #0a2327);
+    --nav-bg-2: var(--brand-nav-bg-2-dark, #0f2f34);
+    --nav-muted: #86a5a9;
+    --accent: var(--brand-accent-on-dark, #d9b978);
+    --accent-text: var(--brand-accent-on-dark, #d9b978);
+    --accent-soft: #2a2416;
+    --ok: #63c58f;
+    --ok-soft: #173225;
+    --warn: #e3ac4f;
+    --warn-soft: #33270f;
+    --crit: #f2877d;
+    --crit-soft: #3a1c1a;
+    --series-a: #5fb7c2;
+    --grid: #233134;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-toast: 0 6px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f1718;
+  --surface: #172224;
+  --surface-2: #1d2a2c;
+  --border: #2b3b3e;
+  --border-strong: #64797c;
+  --text: #e3e8e8;
+  --muted: #9fb0b2;
+  --primary: var(--brand-primary-on-dark, #5fb7c2);
+  --on-primary: #0f1718;
+  --primary-soft: var(--brand-primary-soft-dark, #183a3f);
+  --nav-bg: var(--brand-nav-bg-dark, #0a2327);
+  --nav-bg-2: var(--brand-nav-bg-2-dark, #0f2f34);
+  --nav-muted: #86a5a9;
+  --accent: var(--brand-accent-on-dark, #d9b978);
+  --accent-text: var(--brand-accent-on-dark, #d9b978);
+  --accent-soft: #2a2416;
+  --ok: #63c58f;
+  --ok-soft: #173225;
+  --warn: #e3ac4f;
+  --warn-soft: #33270f;
+  --crit: #f2877d;
+  --crit-soft: #3a1c1a;
+  --series-a: #5fb7c2;
+  --grid: #233134;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-toast: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Components size in rem against this root; body text itself is the
+   Petrol & Brass 14px/20px. */
+html {
+  font-size: 15px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Anything someone may copy exactly (IDs, hosts, UPIDs, paths). */
+code,
+.mono,
+.resurgam-mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

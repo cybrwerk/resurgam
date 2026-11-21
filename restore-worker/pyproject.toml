@@ -1,0 +1,43 @@
+[project]
+name = "resurgam-worker"
+version = "0.1.0"
+description = "RESURGAM Restore Worker — capability checks and safe PBS CLI wrappers"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.6",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+resurgam-lab-agent = "resurgam_worker.lab_agent.daemon:run_forever"
+resurgam-lab-prober = "resurgam_worker.lab_prober.daemon:run_forever"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.16.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/resurgam_worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/resurgam_worker/tests"]
+
+# Same configuration as ../backend/pyproject.toml.
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# S603 additionally: this package wraps CLIs, and each subprocess call
+# carries a reviewed `# noqa: S603 - <why it's safe>` comment.
+extend-select = ["BLE001", "N802", "A002", "F403", "S603"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/resurgam_worker/tests/*" = ["S603"]

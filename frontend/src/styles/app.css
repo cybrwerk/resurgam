@@ -1,0 +1,537 @@
+/* Global component classes, per the cybrwerk "Petrol & Brass" design system
+   (components/bundle.css there: pb-btn, pb-panel, pb-table, pb-filterbar,
+   pb-kpi, pb-tag ...). Token variables and logical properties only. */
+
+/* --- links --------------------------------------------------------------- */
+
+/* Plain text links follow the theme instead of the browser's default blue
+   (unreadable on the dark surfaces). Zero specificity, so any component
+   class that styles its own anchor still wins. */
+:where(a),
+:where(a):visited {
+  color: var(--primary);
+}
+
+/* --- panels -------------------------------------------------------------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+
+.panelPadded {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+/* pb-panel-head: title (+ optional sub text) and actions, on the panel's
+   own surface with a hairline below. */
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Fits a control-height button, so the head doesn't change height when an
+     action (e.g. "Edit") appears or disappears. */
+  min-height: 42px;
+  padding: 6px 14px;
+  border-block-end: 1px solid var(--border);
+  /* Narrow screens: actions drop below the title instead of squeezing it. */
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+.panelTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.panelActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  margin-inline-start: auto;
+  gap: var(--space-2);
+}
+
+.panelBody {
+  padding: var(--space-4);
+}
+
+.panelIntro {
+  margin: 0 0 var(--space-3);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* --- filter bar (pb-filterbar) --------------------------------------------
+   One surface strip above a table holding the scope selects, the free-text
+   query and the actions. Fields keep a small label for accessibility. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  margin-block-end: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.toolbar .field {
+  margin-block-end: 0;
+  gap: 2px;
+}
+
+.toolbar .label {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+/* A toolbar inside a panel body is already framed by the panel. */
+.panel .toolbar {
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+/* --- buttons (pb-btn) ----------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: var(--control-height);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* Petrol & Brass: destructive actions stay default-styled and confirm in
+   the page. The class stays as a semantic marker (tests, future styling). */
+.buttonDanger {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.buttonGhost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.buttonGhost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+/* --- form controls -------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-end: var(--space-3);
+  /* Grid/flex items default to min-width: auto, letting a long label,
+     button, or select force the whole track wider than its container --
+     the cause of a real horizontal-scroll bug found live in a
+     content-heavy modal form. min-width: 0 lets this field shrink to
+     its track instead, wrapping/eliding its own content rather than
+     blowing out the layout around it. */
+  min-width: 0;
+}
+
+.label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.input,
+.select {
+  min-height: var(--control-height);
+  padding-inline: var(--space-2);
+  padding-block: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+input.input,
+select.select {
+  height: var(--control-height);
+  padding-block: 0;
+}
+
+/* --- tables (pb-table) ----------------------------------------------------- */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  text-align: start;
+  padding: 8px 12px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border-block-end: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.table td {
+  padding: 7px 12px;
+  border-block-end: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-block-end: none;
+}
+
+.table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+/* Numbers end-aligned with tabular numerals (pb-table .end). */
+.table .end {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Row actions sit at the end of the row, compact. */
+.table td .button {
+  height: 26px;
+  padding-inline: var(--space-2);
+  font-size: 12.5px;
+}
+
+.tableRowLink {
+  cursor: pointer;
+}
+
+/* --- KPI tiles (pb-kpi) ---------------------------------------------------- */
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 1100px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .kpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.kpi {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3) 14px;
+  text-align: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+
+a.kpi:hover,
+button.kpi:hover {
+  border-color: var(--primary);
+  cursor: pointer;
+}
+
+.kpiLabel {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kpiValue {
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiDelta {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+
+/* Only when the number needs action. */
+.kpiAttention {
+  border-block-start: 3px solid var(--crit);
+}
+
+/* --- tags and chips (pb-tag, pb-chip) -------------------------------------- */
+
+.tag {
+  display: inline-block;
+  padding-inline: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tagAttention {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding-inline: var(--space-2) var(--space-1);
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+}
+
+/* --- inline alerts ---------------------------------------------------------- */
+
+.inlineAlert {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-inline-start-width: 4px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.inlineAlertDanger {
+  background: var(--crit-soft);
+  border-color: var(--crit);
+  color: var(--text);
+}
+
+.inlineAlertInfo {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.inlineAlertSuccess {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--text);
+}
+
+/* The tone icon: fixed size, aligned with the first text line. */
+.inlineAlertIcon {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-block-start: 1px;
+}
+
+.mutedText {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* --- shared page building blocks (RESURGAM) -------------------------------- */
+
+/* Read-only key/value list, OPNsense-style: fixed label column. */
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) 1fr;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  font-size: 14px;
+  align-items: center;
+}
+
+.detailGrid dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detailGrid dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.detailGrid dd > * {
+  min-width: 0;
+}
+
+/* Phones: label above value -- a fixed label column leaves the value a
+   sliver one character wide. */
+@media (max-width: 560px) {
+  .detailGrid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .detailGrid dd {
+    margin-block-end: var(--space-2);
+  }
+}
+
+/* Edit form, OPNsense-style: label start, control (and its hint) end.
+   Collapses to the stacked layout on narrow screens. */
+.formGrid .field {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(0, 32rem);
+  column-gap: var(--space-5);
+  align-items: center;
+}
+
+.formGrid .field > :not(.label) {
+  grid-column: 2;
+}
+
+.formGrid .field > .mutedText {
+  margin: var(--space-1) 0 0;
+}
+
+@media (max-width: 720px) {
+  .formGrid .field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formGrid .field > :not(.label) {
+    grid-column: 1;
+  }
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--border);
+}
+
+/* Phones: footer buttons share the row (and wrap) instead of running off
+   the left edge of a dialog. */
+@media (max-width: 480px) {
+  .formActions {
+    flex-direction: column-reverse;
+  }
+
+  .formActions > .button {
+    width: 100%;
+  }
+}
+
+/* A checkbox with its label after it; as tall as a control so it lines up in
+   a toolbar or a formGrid row. */
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  font-size: 14px;
+}
+
+/* --- touch devices ---------------------------------------------------------- */
+
+/* Finger-sized controls on touch screens and phones (30px is a mouse size),
+   and 16px inputs so iOS Safari does not zoom in on focus. */
+@media (pointer: coarse), (max-width: 760px) {
+  :root {
+    --control-height: 40px;
+  }
+
+  .table td .button {
+    height: 36px;
+  }
+
+  .input,
+  .select {
+    font-size: 16px;
+  }
+}

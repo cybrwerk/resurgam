@@ -1,0 +1,27 @@
+# 0015 — Jobs page: multi-instance selection, date filter, task-log modal, CSV export
+
+Status: Accepted (2026-09-17)
+
+## Context
+
+Four UI findings on the Jobs pages (manifest §17 task history), all against the same shared `TasksPage.tsx`: a date-range filter; a checkbox list to select several PBS instances at once (today: exactly one, via a single-select dropdown); clicking a task's UPID should open a modal with its full log (today: a plain, non-interactive cell); export the current view as CSV.
+
+## Decision
+
+**Multi-instance selection is a new top-level `GET /tasks` endpoint** (`api/v1/inventory.py`), not an extension of the existing per-instance `GET /pbs-instances/{id}/tasks` — a cross-instance query doesn't belong nested under one instance's resource path, and `task_types`'s existing repeated-query-param → `.in_()` → filter-before-`.limit()` pattern extends cleanly to `pbs_instance_ids`. The old single-instance endpoint is left untouched (real, tested, no reason to remove it). New composite index `(pbs_instance_id, started_at)` on `task_runs` (migration 0018), since this is the first query filtering and ordering on that combination at real scale.
+
+**The checkbox list defaults to every visible instance pre-checked**, seeded once from the instances query via a ref-guarded effect (not recomputed on every render, and not overwritten by a later refetch once the operator has made their own selection) — avoids regressing to an empty first-load state.
+
+**"Sync" and the Sync Jobs table are hidden unless exactly one instance is checked** (confirmed with the user) — both are inherently per-instance actions that stop making unambiguous sense once several instances are selected at once; they reappear the moment the selection narrows back to one.
+
+**CSV export is built client-side**, not a new server endpoint mirroring `/customers/export`'s `csv.writer`/`StreamingResponse` pattern — deliberately different from that precedent, because Jobs' own client-side search (never sent to the server — the only server-side filter has always been `task_types`) makes "current view" an irreducibly client-side concept here. A server endpoint honoring only the server-side filters would silently export more rows than the table shows. `api/client.ts`'s `downloadFile` was split into a `fetch`-then-save half and a new standalone `downloadBlob(blob, filename)` — the latter is what CSV export calls with an in-memory-built blob, since there's no URL to fetch.
+
+**The task-log endpoint fetches the *tail*, not the head**, capped at `TASK_LOG_TAIL_LINES = 5000` — for a failed task the actual error is almost always near the end; truncating from the head risks hiding it (raised directly by the user). Confirmed live (2026-09-17, real PBS 4.2 instance) that this is achievable: the log endpoint's real envelope is `{"data": [...], "success": 1, "total": <int>}` — `total` sits *outside* `data`, unlike every other PBS call in this codebase (which only ever unwraps `data`) — so a new `_get_full_response` helper (preserving the whole body) sits alongside `_get_data` in `pbs_api.py`. `get_task_log` does two requests: a cheap `limit=1` call to learn `total`, then a real fetch at `start = max(1, total - tail_lines + 1)`. Also confirmed live: `start` is a 1-indexed absolute line number to begin from (not a skip-count), and `start=0` is a special-cased alias for "from the beginning" — both were unverified assumptions going in, both differ from what a naive reading of "start/limit" pagination would suggest. Falls back to a head fetch if no usable `total` comes back, logged as a degraded but honest result rather than failing outright.
+
+**The endpoint lives in `pbs_instances.py`, not `inventory.py`**, unlike the list endpoint above — it's a live PBS probe needing the instance's own host/token to reach PBS, matching every other live-probe endpoint's location and shape in that file (`_get_instance_or_404` → decrypt secret → `TrustConfig` → connectivity call → 502 `pbs_unreachable` if unreachable), not a DB-only read.
+
+## Consequences
+
+- `QueryState` (this app's shared loading/error/empty wrapper) assumes a query eventually settles into loading, error, or success — a query left permanently `enabled: false` sits in an unhandled idle state that crashes `QueryState`'s children callback (`data` is `undefined`, not the declared type). Found while testing `TaskLogModal`, which only enables its query while the modal is open. Fixed locally (don't render `QueryState` at all while closed) rather than changing `QueryState` itself — this is the first component in the app to combine `QueryState` with a conditionally-`enabled` query, so it's not yet clear whether `QueryState` itself should grow idle-state handling or whether "don't render it while disabled" is the right convention going forward; left as an open question for the next caller that hits the same shape, not resolved generically here.
+- CT/LXC-side task-log verification was not needed here (PBS tasks are node-agnostic, unlike PVE's per-node UPIDs) — the `localhost` node assumption for the log endpoint specifically (as opposed to the already-confirmed list endpoint) was reconfirmed live rather than inherited.
+- Real UPIDs contain PBS's own `\x2d`/`\x3a`-style escaping for special characters in the worker-id segment (confirmed live) — round-trips correctly unencoded through both a raw PBS call and this project's own FastAPI `{upid}` path param; no additional encoding/decoding was needed on either side.

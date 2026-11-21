@@ -1,0 +1,55 @@
+.field {
+  grid-column: 1 / -1;
+  margin-bottom: 0.75rem;
+}
+
+.controls {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inlineLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.narrowInput {
+  width: auto;
+}
+
+.dayPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.85rem;
+}
+
+.dayToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.preview {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.preview code {
+  font-family: var(--resurgam-font-mono);
+  background: var(--surface-raised);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+}

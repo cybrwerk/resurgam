@@ -1,0 +1,93 @@
+.createPanel,
+.importResult {
+  margin-bottom: 1rem;
+}
+
+.alert {
+  margin-bottom: 1rem;
+}
+
+.bodyText {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* An input with its own inline action (e.g. "Record") or toggle. */
+.inlineControl {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inlineControl :global(.input) {
+  flex: 1;
+  min-width: 0;
+}
+
+.recordForm {
+  margin-top: 0.85rem;
+}
+
+.history {
+  margin-top: 0.85rem;
+  align-items: start;
+}
+
+.historyList {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+.checkList {
+  display: flex;
+  flex-direction: column;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.875rem;
+}
+
+.checkRow:last-child {
+  border-bottom: none;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.875rem;
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.emptyList {
+  margin: 0;
+  padding: 0.75rem 1rem;
+}
+
+.errorList {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+/* The modal's own Close/Disable/Edit row, below the section panels. */
+.modalFooter {
+  margin-top: 1.25rem;
+}

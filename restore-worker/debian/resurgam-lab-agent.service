@@ -1,0 +1,20 @@
+[Unit]
+Description=RESURGAM Recovery Lab probe agent
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target pve-cluster.service pvedaemon.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Root is required, not merely convenient -- confirmed live for the
+# equivalent restore-worker case (ADR 0011): /dev/kvm group membership
+# alone is not sufficient, and this agent additionally needs to create
+# /dev/loopN devices (proxmox-backup-client map) and manage VMs (qm).
+User=root
+EnvironmentFile=-/etc/default/resurgam-lab-agent
+ExecStart=/opt/venvs/resurgam-lab-agent/bin/resurgam-lab-agent
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

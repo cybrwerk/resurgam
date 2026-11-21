@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node (frontend)
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local Claude Code session state (tool permissions etc.) — not shared project config
+.claude/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Packer appliance image build (appliance/packer/) -- generated
+# artifacts and build-time-only secrets, never committed.
+appliance/packer/output-resurgam/
+appliance/packer/build_key
+appliance/packer/build_key.pub
+appliance/packer/http/user-data

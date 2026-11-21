@@ -1,0 +1,90 @@
+# RESURGAM Recovery Lab agent configuration (ADR 0019).
+# Installed as /etc/default/resurgam-lab-agent -- a dpkg conffile, so
+# your edits survive package upgrades. Restart the service after
+# changing anything here: systemctl restart resurgam-lab-agent
+
+# Pairing a node from RESURGAM's Lab Compute wizard (ADR 0027) writes
+# this file for you. Edit it by hand only for a manual install or to
+# add the PBS token later.
+
+# Required -- the agent refuses to start without these two:
+
+# The RESURGAM backend's API base URL.
+#RESURGAM_BACKEND_URL=https://resurgam.example.com/api/v1
+
+# This cluster's agent token. Set automatically by pairing; for a manual
+# install generate/rotate it in RESURGAM under Infrastructure -> PVE
+# Targets -> this cluster -> "resurgam-lab-agent token" ("Generate /
+# rotate token"). Shown exactly once at generation time.
+#RESURGAM_LAB_AGENT_TOKEN=
+
+# Optional since 0.2.6 -- this agent's own local PBS API token,
+# "<token-id>:<secret>" (e.g. "resurgam@pbs!dev:xxxxxxxx-xxxx-..."), with
+# at least Datastore.Read on whatever datastore(s) this cluster's
+# workloads are backed up to. Never sent to RESURGAM -- used only to
+# authenticate this host's own `proxmox-backup-client` calls.
+# Without it the agent still starts, but only runs template builds,
+# appliance snippet jobs and the guest-exec "live" indexing hook; lab
+# runs, ephemeral file indexing and Disk Mounts wait until it is set.
+#RESURGAM_LAB_AGENT_PBS_TOKEN=
+
+# The appliance's TLS CA certificate (written by pairing, so the agent
+# trusts the appliance's internal HTTPS certificate). Empty = the
+# system trust store (use that when RESURGAM has a publicly trusted
+# certificate).
+#RESURGAM_LAB_AGENT_CA_FILE=
+
+# Optional -- defaults shown:
+#RESURGAM_LAB_AGENT_POLL_INTERVAL_SECONDS=5
+# PVE "dir" storage (content "images") whose path is OVERLAY_DIR -- must
+# exist on this node; RESURGAM's "Set up lab compute" wizard can create it.
+#RESURGAM_LAB_AGENT_OVERLAY_STORAGE_ID=resurgam-lab-overlays
+#RESURGAM_LAB_AGENT_OVERLAY_DIR=/var/lib/resurgam-lab-agent/overlays
+#RESURGAM_LAB_AGENT_VM_MEMORY_MB=2048
+#RESURGAM_LAB_AGENT_VM_CORES=2
+#RESURGAM_LAB_AGENT_GUEST_EXEC_AGENT_WAIT_TIMEOUT_SECONDS=600
+# This node's PVE node name (default: the short host name, which is what
+# PVE uses). Disk Mounts (ADR 0025) refuse a job meant for another node.
+# Set it only if the PVE node name differs from the host name.
+#RESURGAM_LAB_AGENT_NODE_NAME=
+# How long a share helper VM may take to boot and export the disks.
+#RESURGAM_LAB_AGENT_DISK_MOUNT_READY_TIMEOUT_SECONDS=600
+
+# Guest-exec File Indexing's "live" method (ADR 0021) needs ONE manual,
+# one-time step this package does not do for you: add a line to
+# /etc/vzdump.conf (create it if it doesn't exist) so vzdump actually
+# invokes the shipped hookscript on every real backup --
+#
+#   script: /usr/share/resurgam-lab-agent/hooks/resurgam-guest-exec-live-hook.sh
+#
+# This is deliberately NOT the per-VM `hookscript` property (`qm set
+# <vmid> --hookscript ...`) -- confirmed live (2026-09-24) that PVE's
+# per-VM hookscript only fires on VM start/stop, never on a backup; the
+# mechanism that actually fires on backup phases is vzdump's own,
+# separate, node-level `script:` option. The shipped script itself
+# re-checks with the RESURGAM backend whether a given VM's backup is
+# actually relevant before doing anything, so this one line applies
+# correctly node-wide -- no per-VM PVE config to maintain.
+
+# GUEST-EXEC FILE INDEXING IS NOT RECOMMENDED AS A PRIMARY METHOD RIGHT
+# NOW (ADR 0021). Every stage up to final retrieval works and is live-
+# verified, but retrieval itself has failed deterministically in every
+# one of four independent live test rounds against a real production
+# VM, and the root cause was never isolated despite substantial
+# investigation (a size-ceiling theory and a content-triggered-AV-
+# scanning theory were both tested directly and disproven/ineffective).
+# If you still want to try it: as a general precaution (not a confirmed
+# fix for the above), exclude RESURGAM's working directory from the
+# guest's antivirus -- every mainstream backup agent requires the same
+# class of exclusion for its own working path. For the built-in
+# Windows Defender, run inside each opted-in Windows guest (elevated
+# PowerShell):
+#
+#   Add-MpPreference -ExclusionPath 'C:\Windows\Temp\resurgam-index-chunk-*'
+#   Add-MpPreference -ExclusionPath 'C:\Windows\Temp\resurgam-index-manifest.txt'
+#
+# In an environment where local Defender settings are centrally managed
+# (Microsoft Defender for Endpoint / Group Policy), add the equivalent
+# managed exclusion instead -- a locally-run `Add-MpPreference` won't
+# stick if policy overrides it. See ADR 0021's live-verification
+# addendum for the full, honest history of what was tried.

@@ -1,0 +1,65 @@
+.filter {
+  width: 20rem;
+  max-width: 100%;
+}
+
+/* Keeps each row on one line (customer, "PBS / datastore", dates used to
+   wrap into three); the table scrolls horizontally if it runs out of room. */
+.nowrap {
+  white-space: nowrap;
+}
+
+.fileIndexCell {
+  display: flex;
+  white-space: nowrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.fileIndexToggle {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.fileIndexToggle input {
+  cursor: pointer;
+}
+
+.compactButton {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+}
+
+.excludePatternsButton {
+  color: var(--text-secondary);
+}
+
+.stale-warning {
+  color: var(--status-warning);
+  font-weight: 500;
+}
+
+.stale-danger {
+  color: var(--status-critical);
+  font-weight: 600;
+}
+
+.workloadCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.workloadName {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.workloadLocation {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}

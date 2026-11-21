@@ -1,0 +1,127 @@
+/* pb-search: sits in the deep-petrol top bar. */
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 32px;
+  padding-inline: 10px;
+  background: var(--nav-bg-2);
+  border: 1px solid var(--nav-muted);
+  border-radius: var(--radius-md);
+  color: var(--nav-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.trigger:hover {
+  color: var(--nav-fg);
+}
+
+.trigger span {
+  flex: 1;
+  text-align: start;
+}
+
+.kbd {
+  font-family: inherit;
+  font-size: 11px;
+  background: var(--nav-bg);
+  border: 1px solid var(--nav-muted);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+  color: var(--nav-muted);
+}
+
+.dialog {
+  width: min(34rem, 90vw);
+  max-height: 70vh;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel, 0.75rem);
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.25);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* A real bug found live (2026-09-24): `display: flex` on the bare
+   `.dialog` selector overrode the browser's own `dialog:not([open]) {
+   display: none }` default, so this dialog rendered visible at all
+   times regardless of `open`/`showModal()` -- a permanently-open-looking
+   dropdown overlapping the page on every load. Scoped to `[open]` here,
+   matching Modal.module.css's own (correct, bug-free) `.dialog` rule,
+   which never overrides the closed-state default at all. */
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog::backdrop {
+  background: rgba(10, 20, 20, 0.45);
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.searchIcon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  border: none;
+  background: none;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem;
+  overflow-y: auto;
+}
+
+.resultButton {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.resultActive {
+  background: var(--surface-raised);
+}
+
+.resultGroup {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 6rem;
+}
+
+.resultLabel {
+  font-size: 0.9rem;
+}

@@ -1,0 +1,156 @@
+.topbar {
+  position: relative;
+  z-index: 30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--topbar-height);
+  padding-inline: var(--space-4);
+  background: var(--nav-bg);
+  color: var(--nav-fg);
+  border-block-end: 2px solid var(--accent);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.brandMark {
+  width: auto;
+  height: 30px;
+  display: block;
+}
+
+.wordmark {
+  font-size: 17px;
+  line-height: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.wordmark small {
+  display: block;
+  font-size: 10.5px;
+  line-height: 13px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  /* Always at the inline-end edge -- on phones the search field (which
+     otherwise fills the middle) is hidden, and without this the tools
+     bunched up next to the brand. */
+  margin-inline-start: auto;
+}
+
+/* pb-select-dark */
+.darkSelect {
+  height: 28px;
+  padding-inline: 6px;
+  border-radius: var(--radius-md);
+  background: var(--nav-bg-2);
+  color: var(--nav-fg);
+  border: 1px solid var(--nav-muted);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--nav-fg);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--nav-bg-2);
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.menuButton {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .menuButton {
+    display: grid;
+  }
+
+  .search,
+  .wordmark small {
+    display: none;
+  }
+
+  .topbar {
+    gap: var(--space-2);
+  }
+}
+
+/* RESURGAM's top bar holds one control more than the Petrol & Brass one (the
+   tenant scope), so on phones the language select gives way and the wordmark
+   is truncated to keep theme and user reachable. */
+@media (max-width: 560px) {
+  .languageSelect {
+    display: none;
+  }
+}
+
+/* On phones the brand may shrink instead of the tools: a long white-label
+   app title is cut off with an ellipsis rather than hidden, so the bar still
+   says which installation this is. */
+@media (max-width: 560px) {
+  .brand {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .wordmark {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 420px) {
+  .wordmark {
+    font-size: 15px;
+  }
+}
+
+/* Finger-sized icon buttons on touch screens. */
+@media (pointer: coarse), (max-width: 760px) {
+  .iconButton {
+    width: 40px;
+    height: 40px;
+  }
+}

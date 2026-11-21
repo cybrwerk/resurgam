@@ -1,0 +1,17 @@
+[Unit]
+Description=RESURGAM first-boot setup (generates secrets, starts the appliance)
+Documentation=https://github.com/resurgam/resurgam
+After=docker.service network-online.target
+Wants=network-online.target
+# Once appliance/.env exists, this unit is permanently a no-op -- the
+# condition is re-checked on every boot, so it costs nothing to leave
+# enabled forever rather than disabling itself.
+ConditionPathExists=!/opt/resurgam/appliance/.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/resurgam/appliance/first-boot.sh
+
+[Install]
+WantedBy=multi-user.target

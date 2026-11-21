@@ -1,0 +1,24 @@
+[Unit]
+Description=RESURGAM Recovery Lab probe appliance daemon
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target resurgam-lab-router.service
+Wants=network-online.target
+Requires=resurgam-lab-router.service
+# Disabled by default in the golden template image -- cloud-init's
+# runcmd enables+starts this only once the per-run snippet has landed.
+ConditionPathExists=/etc/default/resurgam-lab-prober
+
+[Service]
+Type=simple
+# Root is required for the net0 secondary-address aliasing a probe
+# target outside this appliance's own subnet needs
+# (`lab_prober/netinit.py`'s `ip addr add`).
+User=root
+EnvironmentFile=-/etc/default/resurgam-lab-prober
+EnvironmentFile=-/etc/default/resurgam-lab-router
+ExecStart=/opt/venvs/resurgam-lab-prober/bin/resurgam-lab-prober
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

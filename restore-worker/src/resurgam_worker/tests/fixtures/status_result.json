@@ -1,0 +1,12 @@
+{
+  "Qemu": {
+    "ids": {
+      "qemu_tenant-a@pbs@pbs1.example.internal:8007:backup-store:tenant-a/vm/116/2026-09-14T00:48:57Z": {
+        "cid": 10,
+        "pid": 1973407,
+        "timeout": 147,
+        "uptime": 455
+      }
+    }
+  }
+}

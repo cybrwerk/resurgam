@@ -1,0 +1,33 @@
+.rowActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.commandBlock {
+  background: var(--surface-raised);
+  border-radius: var(--radius-control);
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0 0 1rem;
+}
+
+.checksList {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.modalDetails {
+  margin-bottom: 1rem;
+}
+
+.pathList {
+  margin: 0;
+  padding-inline-start: 1rem;
+  max-height: 8rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}

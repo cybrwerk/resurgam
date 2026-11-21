@@ -1,0 +1,147 @@
+.kpiRow {
+  margin-block-end: var(--space-3);
+}
+
+/* Fixed dashboard layout: alarms across the top (what needs attention
+   first), then recent activity on the left next to overdue backups and
+   datastore usage stacked on the right. Items stretch within their grid
+   area, so the left and right columns end on the same line and the grid
+   has no ragged gaps however long each list is. */
+.panelsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "alarms alarms"
+    "activity overdue"
+    "activity usage";
+  grid-template-rows: auto auto 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .panelsGrid {
+    grid-template-columns: 1fr;
+    grid-template-areas: "alarms" "activity" "overdue" "usage";
+    grid-template-rows: none;
+  }
+}
+
+.panel {
+  min-width: 0;
+}
+
+.alarmsArea {
+  grid-area: alarms;
+}
+
+.activityArea {
+  grid-area: activity;
+}
+
+.overdueArea {
+  grid-area: overdue;
+}
+
+.usageArea {
+  grid-area: usage;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-default);
+  flex-wrap: wrap;
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.listPrimary {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.listSecondary {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.listTimestamp {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.listMore {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding-top: 0.5rem;
+}
+
+.listMoreButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.usageList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.usageRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.usageHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.usageBarTrack {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.usageBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-petrol-600);
+}
+
+.usageBarWarning {
+  background: var(--status-warning);
+}
+
+.usageBarDanger {
+  background: var(--status-critical);
+}

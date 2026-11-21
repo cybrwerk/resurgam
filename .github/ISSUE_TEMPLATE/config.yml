@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea discussion
+    url: https://github.com/cybrwerk/resurgam/discussions
+    about: Ask questions and discuss ideas with the community.
+  - name: Security vulnerability
+    url: https://github.com/cybrwerk/resurgam/security/advisories/new
+    about: Report security problems privately, never as a public issue.
+  - name: Commercial support
+    url: https://cybrwerk.ch
+    about: Support, hosting or consulting from cybrwerk.

@@ -1,0 +1,55 @@
+[Unit]
+Description=RESURGAM file-restore worker
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=resurgam-worker
+Group=resurgam-worker
+# /dev/kvm and /dev/vhost-vsock are root:kvm 0660 -- the group is what lets
+# proxmox-file-restore boot its micro-VM without root (see below).
+SupplementaryGroups=kvm
+
+# Download content (single files, folder/multi-selection ZIPs) goes to files here, never to
+# Postgres; the API container reads the same directory through a read-only bind mount
+# (appliance/docker-compose.yml). Created by appliance/release/host-setup.sh. Set before the
+# EnvironmentFile, so /etc/default/resurgam-file-restore-worker can override it.
+Environment=FILE_RESTORE_OUTPUT_DIR=/var/lib/resurgam/file-restore
+EnvironmentFile=-/etc/default/resurgam-file-restore-worker
+ExecStart=/opt/venvs/resurgam-backend/bin/resurgam-file-restore-worker
+Restart=on-failure
+RestartSec=5s
+
+# --- Privileges: none beyond the kvm group (live-verified 2026-10-07) ---
+#
+# ADR 0011/0013 recorded that proxmox-file-restore's VM path "needs root" (EACCES below the
+# top-level disk listing), and the first version of this unit guessed a capability set
+# (CAP_SYS_ADMIN & co.) to cover it. Tracing it on a Debian 13 appliance VM with nested KVM
+# against a local PBS (ADR 0011 addendum) showed the real cause: the tool creates
+# /run/proxmox-backup/<uid>/, its QMP socket in /run/proxmox-backup/ and its micro-VM log in
+# /var/log/proxmox-backup/file-restore/ -- all root/backup-owned on a stock install. With
+# appliance/release/host-setup.sh's tmpfiles.d entry making those writable for this user, deep VM
+# listing, extraction and the CT/host catalog path all work with NO capabilities at all, under
+# exactly the sandbox below. So the bounding set is empty.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+
+# Ordinary systemd sandboxing -- unrelated to the capability question
+# above, safe to keep even if the capability set above needs widening.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# What proxmox-file-restore writes (see above). '-': a host without the Proxmox tools yet (an
+# appliance before its first host setup) must still be able to start the worker.
+ReadWritePaths=-/run/proxmox-backup -/var/log/proxmox-backup/file-restore
+# Download content and extraction scratch space (see FILE_RESTORE_OUTPUT_DIR above). Staging lives
+# here rather than in the (private, possibly tmpfs) /tmp: it can be tens of GB, and the finished
+# file is renamed into place on the same file system.
+ReadWritePaths=-/var/lib/resurgam/file-restore
+StateDirectory=resurgam-file-restore-worker
+
+[Install]
+WantedBy=multi-user.target

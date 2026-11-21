@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest an idea or improvement for RESURGAM
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe your situation and what is hard or impossible today.
+      placeholder: "As an MSP running 5 PBS instances, I can't ..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds or alternatives you've considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Environment size, screenshots, links to PBS/PVE docs, ...

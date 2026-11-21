@@ -1,0 +1,103 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-page);
+}
+
+.card {
+  width: 100%;
+  max-width: 22rem;
+  padding: 2rem;
+}
+
+.brandLogo {
+  display: block;
+  height: 2.75rem;
+  width: auto;
+  margin: 0 auto 1.5rem;
+}
+
+/* RESURGAM's own lockup: the mark plus live text (not an image), so it stays
+   sharp and follows the theme -- --primary lifts in dark mode. */
+.brandLockup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-6);
+}
+
+.brandMark {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+}
+
+.brandName {
+  font-size: 26px;
+  line-height: 28px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--primary);
+}
+
+.brandSub {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brandTag {
+  font-size: 10.5px;
+  line-height: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin: 1.1rem 0;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-default);
+}
+
+.fullWidth {
+  width: 100%;
+  justify-content: center;
+}
+
+/* White-label app title under a custom logo. */
+.appName {
+  margin: -0.75rem 0 1.25rem;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
+}

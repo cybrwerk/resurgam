@@ -1,0 +1,90 @@
+/* Groups the three MFA panels below it. */
+.sectionTitle {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.badgeOk {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--status-success) 15%, transparent);
+  color: var(--status-success);
+}
+
+.badgeMuted {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.totpEnroll {
+  margin-top: 0.5rem;
+}
+
+.qrCode {
+  width: 180px;
+  height: 180px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  margin: 0.5rem 0;
+}
+
+.secretText {
+  font-size: 0.85rem;
+}
+
+.inlineForm {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-default);
+  font-size: 0.875rem;
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.codesBlock {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-control);
+}
+
+.codesList {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  font-family: var(--resurgam-font-mono);
+  font-size: 0.85rem;
+}
+
+/* Why a Remove button is disabled (last factor while MFA is required). */
+.hint {
+  margin: var(--space-2) 0 0;
+  font-size: 0.85rem;
+}

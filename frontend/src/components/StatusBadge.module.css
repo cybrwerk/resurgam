@@ -1,0 +1,48 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-block: 1px;
+  padding-inline: 6px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.warning {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.danger {
+  background: var(--crit-soft);
+  color: var(--crit);
+}
+
+.info {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* Not a Petrol & Brass status: unknown / not yet determined. Neutral, so it
+   never reads as one of the real states. */
+.unknown {
+  background: var(--surface-2);
+  color: var(--muted);
+}

@@ -1,0 +1,41 @@
+[Unit]
+Description=RESURGAM host capability probe (reports /dev/kvm and the file-restore tools to the containerised API)
+Documentation=https://github.com/resurgam/resurgam
+# Before docker.service so the report already exists when Docker's restart
+# policy brings the API container back up on boot. After udev's coldplug so
+# the kvm module (and with it /dev/kvm) has had its chance to load.
+After=systemd-modules-load.service systemd-udev-trigger.service
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The point of this unit: check /dev/kvm as the exact identity the
+# file-restore/file-index workers run as, natively on the host. The API
+# container can't answer this itself -- it never gets the device.
+User=resurgam-worker
+Group=resurgam-worker
+SupplementaryGroups=kvm
+
+# /run/resurgam is bind-mounted read-only into the API container
+# (appliance/docker-compose.yml). Preserve=yes is load-bearing: a bind
+# mount is pinned to the directory's inode, so if systemd removed and
+# recreated it on stop/restart, the container would keep seeing the old,
+# deleted directory and never another report. host_capabilities.py
+# replaces the file inside it atomically instead.
+RuntimeDirectory=resurgam
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+ExecStart=/opt/venvs/resurgam-backend/bin/resurgam-host-probe /run/resurgam/host-capabilities.json
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Same view as the workers: the probe also reports whether proxmox-file-restore could write these
+# (resurgam_worker.capability.checks.run_host_checks).
+ReadWritePaths=-/run/proxmox-backup -/var/log/proxmox-backup/file-restore
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="600" height="144" role="img" aria-label="RESURGAM Backup Center, a cybrwerk project">
+  <g transform="translate(0 4) scale(2)">
+  <circle cx="16" cy="16" r="13.4" fill="#005f6b"/>
+  <path d="M25.48 6.52A13.4 13.4 0 1 1 12.53 3.06" fill="none" stroke="#b08d57" stroke-width="2" stroke-linecap="round"/>
+  <path d="M11.94 0.83L15.62 2.23L13.13 5.28Z" fill="#b08d57" stroke="#b08d57" stroke-width="0.6" stroke-linejoin="round"/>
+  <path d="M11.6 23.6V8.7h4.9a4.15 4.15 0 0 1 0 8.3h-4.9M16.1 17l5.3 6.6" fill="none" stroke="#e6f1f2" stroke-width="3.1" stroke-linejoin="miter"/>
+  </g>
+  <g font-family="'Helvetica Neue', Helvetica, 'TeX Gyre Heros', Arial, sans-serif">
+    <text x="78" y="36" font-size="31" font-weight="700" fill="#005f6b" textLength="216" lengthAdjust="spacingAndGlyphs">RESURGAM</text>
+    <text x="79" y="54" font-size="14.5" font-weight="600" fill="#536163" textLength="214" lengthAdjust="spacing">BACKUP CENTER</text>
+    <text x="79" y="67" font-size="9.5" font-weight="400" fill="#536163" textLength="166" lengthAdjust="spacing">A CYBRWERK PROJECT</text>
+  </g>
+</svg>

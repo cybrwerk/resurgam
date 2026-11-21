@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery Evidence -- {{ report.customer_name }}</title>
+<style>
+  @page {
+    size: A4; margin: 2cm 2cm 2.4cm 2cm;
+    /* A real gap found live (2026-09-23, CISO audit): the report's own
+       SHA-256 checksum was computed over the rendered PDF bytes, so it
+       can never be printed on the document that is *of* it (a classic
+       chicken-and-egg -- embedding it would change the bytes it's a
+       hash of). A Report ID generated *before* rendering has no such
+       problem: it's stamped on every page here and used as this
+       generation's own `report_history` primary key, so the checksum
+       recorded against it survives a rename/forward/printout even once
+       the original download filename (which does carry the checksum) is
+       long gone. */
+    @bottom-left {
+      content: "Report ID " "{{ report_id }}" " -- verify this generation's checksum in {{ app_name }}'s Report Center under this ID";
+      font-size: 7pt; color: #888;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-size: 7pt; color: #888;
+    }
+  }
+  body { font-family: "Liberation Sans", Arial, sans-serif; font-size: 10pt; color: #1a1a1a; }
+  h1 { font-size: 16pt; margin-bottom: 0.2em; color: {{ primary_color }}; }
+  h2 { font-size: 12pt; margin-top: 1.6em; margin-bottom: 0.4em; color: {{ primary_color }}; border-left: 5px solid {{ primary_color }}; background: #f4f7f7; padding: 0.25em 0.5em; }
+  .meta { color: #555; font-size: 9pt; margin-bottom: 1.5em; }
+  .controls { color: #555; font-size: 8pt; margin-bottom: 0.5em; }
+  .control-badge { display: inline-block; border: 1px solid #999; border-radius: 3px; padding: 0.05em 0.4em; margin-right: 0.3em; }
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 0.5em; }
+  th, td { text-align: left; padding: 0.3em 0.5em; border-bottom: 1px solid #ddd; }
+  th { background: {{ primary_color }}; color: #fff; font-weight: 600; }
+  tr:nth-child(even) td { background: #f4f7f7; }
+  .muted { color: #777; font-style: italic; }
+  .summary-row span { margin-right: 1.5em; }
+  .report-header { display: flex; align-items: center; gap: 0.8em; margin-bottom: 0.3em; }
+  .report-header img { height: 32px; width: auto; }
+  .verify-ok { color: #2e7d32; font-weight: 600; }
+  .verify-failed { color: #c62828; font-weight: 600; }
+  .verify-none, .verify-unknown { color: #777; }
+  .status-ok { color: #2e7d32; font-weight: 600; }
+  .status-warning { color: #b58a00; font-weight: 600; }
+  .status-critical { color: #c62828; font-weight: 600; }
+  .status-unknown { color: #777; }
+
+  /* --- Cover page --- */
+  .cover-page { page-break-after: always; }
+  .cover-logo { text-align: center; margin-bottom: 0.5em; }
+  .cover-logo img { height: 56px; width: auto; }
+  .cover-title { text-align: center; font-size: 20pt; color: {{ primary_color }}; margin: 0.3em 0 0.1em; }
+  .cover-subtitle { text-align: center; color: #555; font-size: 10.5pt; margin-bottom: 0.3em; }
+  .cover-subtitle.report-id { font-size: 8pt; color: #888; font-family: "Liberation Mono", monospace; margin-bottom: 1.2em; }
+  .cover-hero {
+    background: linear-gradient(135deg, {{ primary_color }}, {{ accent_color }});
+    color: #fff; border-radius: 8px; padding: 1.2em 1.5em; margin-bottom: 1.2em;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .cover-hero .traffic-light-hero { font-size: 22pt; font-weight: 700; letter-spacing: 0.03em; }
+  .cover-hero .traffic-light-sub { font-size: 9.5pt; opacity: 0.9; }
+  .cover-hero .tier-hero { text-align: right; }
+  .cover-hero .tier-hero .tier-label { font-size: 8pt; text-transform: uppercase; opacity: 0.85; letter-spacing: 0.05em; }
+  .cover-hero .tier-hero .tier-value { font-size: 13pt; font-weight: 700; }
+  .cover-section-title { font-size: 10.5pt; font-weight: 700; color: {{ primary_color }}; margin: 1.1em 0 0.3em; }
+  .cover-kpi-note { font-size: 8pt; color: #777; margin-top: 0.2em; }
+
+  .traffic-light { display: inline-block; padding: 0.15em 0.7em; border-radius: 3px; font-weight: 600; color: #fff; }
+  .traffic-light.green { background: #2e7d32; }
+  .traffic-light.amber { background: #b58a00; }
+  .traffic-light.red { background: #c62828; }
+  .kpi-row span { margin-right: 1.5em; display: inline-block; }
+  .tier-badge { display: inline-block; border: 1px solid {{ accent_color }}; color: {{ primary_color }}; border-radius: 3px; padding: 0.1em 0.6em; font-weight: 600; }
+  .leg-strip { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 0.5em 0; }
+  .leg { border: 1px solid #ddd; border-radius: 4px; padding: 0.35em 0.6em; font-size: 8pt; min-width: 9em; }
+  .leg .leg-title { font-weight: 600; }
+  .leg.met { border-color: #2e7d32; }
+  .leg.not_met { border-color: #c62828; }
+  .leg.not_attested { border-color: #b58a00; }
+  .leg.not_applicable { border-color: #999; }
+  .leg-status-met { color: #2e7d32; }
+  .leg-status-not_met { color: #c62828; }
+  .leg-status-not_attested { color: #b58a00; }
+  .leg-status-not_applicable { color: #666; }
+</style>
+</head>
+<body>
+
+{% macro controls(section_key) -%}
+  {% if report.framework and report.section_controls.get(section_key) %}
+  <div class="controls">
+    {% for c in report.section_controls[section_key] %}<span class="control-badge">{{ c.framework }} {{ c.control }}</span>{% endfor %}
+  </div>
+  {% endif %}
+{%- endmacro %}
+
+<!-- Cover page: the executive summary a C-level reader needs at a glance,
+     before any detail table. Everything else in this document is evidence
+     supporting what's shown here. -->
+<div class="cover-page">
+  <div class="cover-logo"><img src="{{ logo_data_uri }}" alt=""></div>
+  <h1 class="cover-title">Recovery Evidence Report</h1>
+  <div class="cover-subtitle">
+    {{ report.customer_name }} ({{ report.customer_match_code }}) &#160;&#183;&#160;
+    {{ report.date_from }} to {{ report.date_to }} &#160;&#183;&#160;
+    Generated {{ report.generated_at }}
+  </div>
+  <div class="cover-subtitle report-id">
+    Report ID {{ report_id }}
+  </div>
+
+  <div class="cover-hero">
+    <div>
+      <div class="traffic-light-hero">{{ report.management_summary.traffic_light|upper }}</div>
+      <div class="traffic-light-sub">
+        {% if report.management_summary.traffic_light == "green" %}Nothing to do
+        {%- elif report.management_summary.traffic_light == "amber" %}Pay attention -- fix it
+        {%- else %}Not okay -- handle immediately{% endif %}
+      </div>
+    </div>
+    <div class="tier-hero">
+      <div class="tier-label">Protection level</div>
+      <div class="tier-value">{{ report.protection_level.label }}</div>
+    </div>
+  </div>
+
+  <div class="cover-section-title">Key Performance Indicators</div>
+  {{ report.management_summary.kpi_bars_svg | safe }}
+  <div class="cover-kpi-note">
+    Unresolved failed jobs: {{ report.management_summary.unresolved_failed_jobs }}
+    {% if report.management_summary.four_eyes_approval_rate is not none %} &#160;&#183;&#160; Four-eyes approval: {{ "%.0f"|format(report.management_summary.four_eyes_approval_rate * 100) }}%{% endif %}
+  </div>
+
+  <div class="cover-section-title">Protection Level Distribution</div>
+  {{ report.protection_level.tier_distribution_svg | safe }}
+
+  <div class="cover-section-title">Backup, Verification &amp; Restore-Test Activity</div>
+  {{ report.management_summary.period_timeline_svg | safe }}
+</div>
+
+<!-- period_timeline_svg / kpi_bars_svg / tier_distribution_svg are the only
+     fields rendered with `| safe`, deliberately -- each is built entirely
+     server-side from numeric aggregates (reporting/charts.py,
+     reporting/timeline_svg.py), never from a customer-editable string, so
+     this is not a template a future change should casually copy `| safe`
+     from for anything else. -->
+
+<h2>3-2-1-1-0 Rule</h2>
+{{ controls("three_two_one_one_zero") }}
+<div class="leg-strip">
+  {% for leg in report.three_two_one_one_zero %}
+  <div class="leg {{ leg.status }}">
+    <div class="leg-title">{{ leg.leg|replace("_", " ")|title }}</div>
+    <div class="leg-status-{{ leg.status }}">{{ leg.status|replace("_", " ")|upper }}</div>
+    <div>{{ leg.detail }}</div>
+    {% if leg.attested_by %}<div class="muted">Attested by {{ leg.attested_by }} on {{ leg.attested_at }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Backup History</h2>
+{{ controls("backup_history") }}
+{% if report.backup_history %}
+<table>
+  <tr><th>Workload</th><th>Type</th><th>Namespace</th><th>Snapshot time</th><th>Size</th><th>Verify</th></tr>
+  {% for e in report.backup_history %}
+  <tr><td>{{ e.workload_label }}</td><td>{{ e.backup_type }}</td><td>{{ e.namespace or "/" }}</td><td>{{ e.snapshot_time }}</td><td>{{ e.size_bytes or "--" }}</td><td class="verify-{{ e.verify_status }}">{{ e.verify_status }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No backup snapshots in this period.</p>
+{% endif %}
+
+<h2>Protection Policy Adherence</h2>
+{{ controls("policy_adherence") }}
+{% if report.policy_adherence %}
+<table>
+  <tr><th>Workload</th><th>Policy</th><th>Status</th><th>Last backup</th><th>Last verify</th></tr>
+  {% for e in report.policy_adherence %}
+  <tr><td>{{ e.workload_label }}</td><td>{{ e.policy_name or "none" }}</td><td class="status-{{ e.status }}">{{ e.status }}</td><td>{{ e.last_backup_at or "--" }}</td><td>{{ e.last_verify_status }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No protected workloads.</p>
+{% endif %}
+
+<h2>Verification Results</h2>
+{{ controls("verification_results") }}
+<div class="summary-row">
+  <span class="verify-ok">OK: {{ report.verification_results.summary.ok }}</span>
+  <span class="verify-failed">Failed: {{ report.verification_results.summary.failed }}</span>
+  <span class="verify-none">None: {{ report.verification_results.summary.none }}</span>
+  <span class="verify-unknown">Unknown: {{ report.verification_results.summary.unknown }}</span>
+</div>
+
+<h2>Failed Jobs &amp; Tasks</h2>
+{{ controls("failed_jobs") }}
+{% if report.failed_jobs %}
+<table>
+  <tr><th>Source</th><th>Item</th><th>Status</th><th>When</th><th>Error</th></tr>
+  {% for e in report.failed_jobs %}
+  <tr><td>{{ e.source }}</td><td>{{ e.label }}</td><td>{{ e.status }}</td><td>{{ e.occurred_at }}</td><td>{{ e.error_message or "--" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No failed jobs or tasks in this period.</p>
+{% endif %}
+
+<h2>Audit Trail</h2>
+{{ controls("audit_trail") }}
+{% if report.audit_trail %}
+<table>
+  <tr><th>When</th><th>Action</th><th>Target</th></tr>
+  {% for e in report.audit_trail %}
+  <tr><td>{{ e.occurred_at }}</td><td>{{ e.action }}</td><td>{{ e.target_type or "--" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No audit events in this period.</p>
+{% endif %}
+<p class="muted">Audit trail coverage begins from when customer-scoped audit tracking was enabled for this system -- events recorded before that are not included.</p>
+
+<h2>Encryption &amp; Transport Attestation</h2>
+{{ controls("encryption_attestation") }}
+<p>All PBS/PVE connections use TLS, verified either against a trusted CA or a pinned certificate fingerprint.</p>
+{% if report.encryption_attestation.instances %}
+<table>
+  <tr><th>PBS instance</th><th>Trust mode</th><th>Fingerprint</th></tr>
+  {% for i in report.encryption_attestation.instances %}
+  <tr><td>{{ i.display_name }}</td><td>{{ i.tls_trust_mode }}</td><td>{{ i.tls_fingerprint_masked or "--" }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Restore-Test Evidence</h2>
+{{ controls("restore_test_evidence") }}
+{% if report.restore_test_evidence %}
+<table>
+  <tr><th>Application group</th><th>Workload</th><th>Run status</th><th>Member status</th><th>Tested</th></tr>
+  {% for e in report.restore_test_evidence %}
+  <tr><td>{{ e.application_group_name }}</td><td>{{ e.workload_label }}</td><td>{{ e.run_status }}</td><td>{{ e.member_status }}</td><td>{{ e.tested_at or "--" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No Recovery Lab restore tests in this period.</p>
+{% endif %}
+
+<h2>Offsite Status</h2>
+{{ controls("offsite_status") }}
+{% if report.offsite_status %}
+<table>
+  <tr><th>Workload</th><th>Offsite copy</th><th>Method</th><th>Schedule</th><th>Last synced</th></tr>
+  {% for e in report.offsite_status %}
+  <tr><td>{{ e.workload_label }}</td><td>{{ "Yes" if e.has_offsite_copy else "No" }}</td><td>{{ e.offsite_method }}</td><td>{{ e.sync_schedule or "--" }}</td><td>{{ e.last_synced_at or "--" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No protected workloads.</p>
+{% endif %}
+
+<h2>Access Control</h2>
+{{ controls("access_control") }}
+{% if report.access_control %}
+<table>
+  <tr><th>User</th><th>Role</th><th>Scope</th><th>Granted</th></tr>
+  {% for e in report.access_control %}
+  <tr><td>{{ e.user_display_name }}</td><td>{{ e.role }}</td><td>{{ e.scope }}</td><td>{{ e.granted_at }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No role assignments cover this customer.</p>
+{% endif %}
+
+<h2>PBS-Native Datastore Access</h2>
+{{ controls("pbs_datastore_access") }}
+<p class="muted">Access granted directly in PBS, outside RESURGAM's own roles above -- the complete picture requires both sections.</p>
+{% if report.pbs_datastore_access %}
+<table>
+  <tr><th>Datastore</th><th>Path</th><th>Role</th><th>Subject</th><th>Type</th></tr>
+  {% for e in report.pbs_datastore_access %}
+  <tr><td>{{ e.datastore_name }}</td><td>{{ e.path }}</td><td>{{ e.role }}</td><td>{{ e.subject }}</td><td>{{ e.subject_type }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No PBS-native ACL grants cover this customer's datastore(s).</p>
+{% endif %}
+
+</body>
+</html>

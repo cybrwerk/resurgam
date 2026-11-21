@@ -1,0 +1,68 @@
+.panel {
+  min-width: 0;
+}
+
+.root,
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.node:hover {
+  background: var(--surface-raised);
+}
+
+.nodeSelected {
+  background: var(--surface-raised);
+  font-weight: 600;
+}
+
+.chevron {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  transform: rotate(-90deg);
+  transition: transform 0.1s ease;
+}
+
+.chevronExpanded {
+  transform: rotate(0deg);
+}
+
+.nodeIcon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+}
+
+.nodeLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leafMessage {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.leafError {
+  color: var(--status-critical);
+}

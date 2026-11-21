@@ -1,0 +1,66 @@
+.loadMoreRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.instanceGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  /* Same height as the date/search inputs next to it in the toolbar, so
+     the checkboxes line up with them instead of floating at the top. */
+  min-height: 2.25rem;
+}
+
+.instanceCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.searchField {
+  width: 20rem;
+  max-width: 100%;
+}
+
+.hint {
+  margin: 0 0 0.85rem;
+}
+
+.upidLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-petrol-600);
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
+  /* A real UPID is long by construction (node+pid+pstart+starttime+
+     type+id+user) -- left unconstrained it wraps across 2-3 lines and
+     pushes every other column (type/worker/status/times) off screen
+     (a real UX-audit finding, 2026-09-23). The full value is still one
+     click away (this button opens the task's log) and still fully
+     searchable/sortable -- only the *display* is capped. */
+  display: block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phones: the UPID would still take the whole viewport at 22rem. */
+@media (max-width: 560px) {
+  .upidLink {
+    max-width: 10rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .upidLink {
+    padding-block: 8px;
+  }
+}

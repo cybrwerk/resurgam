@@ -1,0 +1,148 @@
+/* Spacing between the "New Lab run" panel and the runs list below it. */
+.createRunPanel {
+  margin-bottom: 1rem;
+}
+
+.alert {
+  margin-bottom: 0.85rem;
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sectionSubtitle {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.runDetails {
+  margin-bottom: 1.25rem;
+}
+
+.tokenValue {
+  font-family: var(--resurgam-font-mono);
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.groupForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 40rem;
+}
+
+.memberRow {
+  display: grid;
+  grid-template-columns: 1fr 6rem;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.checkTiers {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.checkTier {
+  border: 1px solid var(--border-default);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.checkTier legend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0 0.25rem;
+}
+
+.memberList {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.memberListItem {
+  border: 1px solid var(--border-default);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.memberListHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+  margin-bottom: 0.35rem;
+}
+
+.probeResultsList {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.runsGroup {
+  margin-bottom: 0.75rem;
+}
+
+.runsGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 0.375rem;
+  background: var(--surface-raised);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.runsGroupHeader:hover {
+  background: var(--surface-panel);
+}
+
+.runsGroupName {
+  font-weight: 600;
+}
+
+.runsGroupCount {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.runsGroupTable {
+  border: 1px solid var(--border-default);
+  border-top: none;
+  border-radius: 0 0 0.375rem 0.375rem;
+  overflow: hidden;
+}
+
+.chevronOpen {
+  transition: transform 0.15s ease;
+}
+
+.chevronClosed {
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}

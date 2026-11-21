@@ -1,0 +1,31 @@
+[Unit]
+Description=RESURGAM Recovery Lab scheduler
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=resurgam-worker
+Group=resurgam-worker
+
+# Same reasoning as resurgam-collector-scheduler.service: this advances
+# in-flight Recovery Lab runs and creates/executes scheduled ones purely
+# via PVE API calls (worker/recovery_lab_scheduler.py -- SDN zone/vnet
+# creation, guest-agent probing, the same calls create_restore_test_plan/
+# execute_restore_test_plan already make from the API process itself) --
+# no local disk/VM access of its own, so no kvm group membership or
+# capability grants are needed here either.
+EnvironmentFile=-/etc/default/resurgam-recovery-lab-scheduler
+ExecStart=/opt/venvs/resurgam-backend/bin/resurgam-recovery-lab-scheduler
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=resurgam-recovery-lab-scheduler
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # Same server the local dev setup uses (backend/docker-compose.dev.yml), so the
+      # tests' default TEST_DATABASE_URL works unchanged; they create their own
+      # `resurgam_test` database on it.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: resurgam
+          POSTGRES_PASSWORD: resurgam-dev-only
+          POSTGRES_DB: resurgam
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U resurgam"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The settings refuse to start on their dev-only defaults unless DEV_MODE is set (a
+      # production safety net, config.py). Locally that comes from backend/.env, which is
+      # not in git. Tests use their own TEST_DATABASE_URL on the postgres service below.
+      DEV_MODE: "true"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      # WeasyPrint (PDF reports) needs Pango and HarfBuzz from the system.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            backend/uv.lock
+            restore-worker/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+
+  restore-worker:
+    name: Restore worker (lint + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: restore-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: restore-worker/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+
+  frontend:
+    name: Frontend (tests + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test
+      - run: npm run build

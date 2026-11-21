@@ -1,0 +1,47 @@
+/* Identity facts in the page header's description line. */
+.identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
+  color: var(--text-primary);
+}
+
+.identityLabel {
+  color: var(--text-secondary);
+  margin-right: 0.25rem;
+}
+
+
+
+
+
+.kpiRow {
+  margin-block-end: var(--space-3);
+}
+
+.estimateFlag {
+  font-size: 1rem;
+  color: var(--status-warning);
+  margin-left: 0.15rem;
+  cursor: help;
+}
+
+.panelsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .panelsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quickLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

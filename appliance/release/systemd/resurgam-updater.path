@@ -1,0 +1,14 @@
+# Starts resurgam-updater.service whenever the API drops an update request
+# (verify/apply) into the shared requests/ directory -- the API container
+# itself never gets Docker or systemd access (ADR 0024). The service claims
+# each request by renaming it away from *.json, so this does not re-trigger
+# on a request that is already being processed.
+[Unit]
+Description=Watch for RESURGAM update requests from the web UI
+
+[Path]
+PathExistsGlob=/var/lib/resurgam/updates/requests/*.json
+Unit=resurgam-updater.service
+
+[Install]
+WantedBy=multi-user.target

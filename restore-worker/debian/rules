@@ -1,0 +1,34 @@
+#!/usr/bin/make -f
+
+# Bundles resurgam-worker (including the pve_client/lab_agent/lab_prober
+# modules) plus its exact pinned deps (pydantic, httpx) into a private
+# venv per binary package (/opt/venvs/resurgam-lab-agent,
+# /opt/venvs/resurgam-lab-prober) -- avoids depending on whatever
+# pydantic/httpx versions a given Debian release's own
+# python3-pydantic/python3-httpx happen to ship (often too old for this
+# project's pinned minimums), same reasoning restore-worker's own
+# pyproject.toml already accepted for its dependency floor.
+export DH_VIRTUALENV_INSTALL_ROOT=/opt/venvs
+
+%:
+	dh $@ --with python-virtualenv
+
+# Two binary packages share this one source tree (Source:
+# resurgam-worker) -- each gets its own venv, install-suffix matching
+# the package name.
+override_dh_virtualenv:
+	dh_virtualenv --python=/usr/bin/python3 --install-suffix=resurgam-lab-agent -p resurgam-lab-agent
+	dh_virtualenv --python=/usr/bin/python3 --install-suffix=resurgam-lab-prober -p resurgam-lab-prober
+
+# resurgam-lab-prober also ships a second unit
+# (debian/resurgam-lab-prober.resurgam-lab-router.service) whose real
+# unit name (resurgam-lab-router) doesn't match the package's own --
+# confirmed live (2026-09-22) that dh_installsystemd's --name=X looks
+# for debian/<package>.X.service, not debian/X.service (the first
+# attempt at this used the wrong filename and silently installed no
+# unit files at all for either package -- --name on a package's own
+# default-matching unit is not needed and was removed here too).
+override_dh_installsystemd:
+	dh_installsystemd -p resurgam-lab-agent
+	dh_installsystemd -p resurgam-lab-prober
+	dh_installsystemd --name=resurgam-lab-router -p resurgam-lab-prober

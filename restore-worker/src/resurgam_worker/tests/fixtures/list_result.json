@@ -1,0 +1,6 @@
+[
+  {"filepath": "ZHJpdmUtc2F0YTAuaW1nLmZpZHgvcGFydC8yL2hpYmVyZmlsLnN5cw==", "leaf": true, "mtime": 1758437733, "size": 1717768192, "text": "hiberfil.sys", "type": "f"},
+  {"filepath": "ZHJpdmUtc2F0YTAuaW1nLmZpZHgvcGFydC8yLyRSZWN5Y2xlLkJpbg==", "leaf": false, "text": "$Recycle.Bin", "type": "d"},
+  {"filepath": "ZHJpdmUtc2F0YTAuaW1nLmZpZHgvcGFydC8yL2xvZ1VwbG9hZGVyU2V0dGluZ3MuaW5p", "leaf": true, "mtime": 1752573939, "size": 90, "text": "logUploaderSettings.ini", "type": "f"},
+  {"filepath": "ZHJpdmUtc2F0YTAuaW1nLmZpZHgvcGFydC8yL1dpbmRvd3M=", "leaf": false, "text": "Windows", "type": "d"}
+]

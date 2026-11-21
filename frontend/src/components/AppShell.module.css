@@ -1,0 +1,38 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding-block: var(--space-5);
+  padding-inline: var(--space-5);
+}
+
+.scrim {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .content {
+    padding-inline: var(--space-4);
+  }
+
+  .scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0, 20, 24, 0.45);
+  }
+}

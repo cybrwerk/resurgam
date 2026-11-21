@@ -1,0 +1,40 @@
+.mountPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.treePanel {
+  max-height: 28rem;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-default);
+  padding-right: 1rem;
+}
+
+.browserPanel {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .treePanel {
+    max-height: 14rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border-default);
+    padding-right: 0;
+    padding-bottom: 0.75rem;
+  }
+}

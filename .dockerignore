@@ -1,0 +1,24 @@
+# Applies to the repo-root build context used by backend/Dockerfile
+# (see appliance/docker-compose.yml). frontend/Dockerfile builds from
+# frontend/ directly and has its own .dockerignore there.
+.git
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.env
+**/.env.*
+!**/.env.example
+backend/tests
+backend/htmlcov
+backend/.coverage
+backend/docker-compose.dev.yml
+frontend/node_modules
+frontend/dist
+frontend/coverage
+restore-worker/.venv
+restore-worker/.pytest_cache
+# restore-worker/debian is deliberately NOT excluded: backend/Dockerfile's
+# `lab-packages` stage builds the Recovery Lab .debs from it.
+restore-worker/.ruff_cache
+restore-worker/src/resurgam_worker/tests

@@ -1,0 +1,19 @@
+[Unit]
+Description=RESURGAM Recovery Lab probe appliance router/DHCP/firewall bootstrap
+Documentation=https://github.com/resurgam/resurgam
+After=network-online.target
+Wants=network-online.target
+Before=resurgam-lab-prober.service
+# Disabled by default in the golden template image -- cloud-init's
+# runcmd enables+starts this only once the per-run snippet (backend
+# URL/token, router config) has actually landed. See ADR 0019.
+ConditionPathExists=/etc/default/resurgam-lab-router
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+ExecStart=/usr/sbin/resurgam-lab-router-bootstrap
+
+[Install]
+WantedBy=multi-user.target

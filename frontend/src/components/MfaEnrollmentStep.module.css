@@ -1,0 +1,76 @@
+/* Forced MFA enrollment at login (MfaEnrollmentStep.tsx). Lives inside the
+   login card, so it follows LoginPage.module.css's spacing. */
+
+.title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.fullWidth {
+  width: 100%;
+  justify-content: center;
+  margin-block-start: var(--space-2);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin: 1.1rem 0;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-default);
+}
+
+.keyBlock {
+  margin-block-end: var(--space-2);
+}
+
+.qrCode {
+  display: block;
+  width: 180px;
+  height: 180px;
+  margin: 0.5rem auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+}
+
+.secret {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.codes {
+  list-style: none;
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+}
+
+.codeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.savedCheck {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  margin-block: var(--space-2);
+}

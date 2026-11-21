@@ -1,0 +1,74 @@
+[project]
+name = "resurgam-api"
+version = "0.1.0"
+description = "RESURGAM Control Plane API"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "pyjwt>=2.8",
+    "bcrypt>=4.1",
+    "cryptography>=42.0",
+    "httpx>=0.27",
+    "authlib>=1.3",
+    "itsdangerous>=2.1",
+    "pyotp>=2.10.0",
+    "webauthn>=3.0.0",
+    "python-multipart>=0.0.32",
+    "resurgam-worker",
+    "weasyprint>=70.0",
+    "jinja2>=3.1.6",
+    "paramiko>=3.5",
+]
+
+[project.scripts]
+resurgam-file-restore-worker = "resurgam_api.worker.file_restore_worker:run_forever"
+resurgam-file-index-worker = "resurgam_api.worker.file_index_worker:run_forever"
+resurgam-collector-scheduler = "resurgam_api.worker.collector_scheduler:run_forever"
+resurgam-recovery-lab-scheduler = "resurgam_api.worker.recovery_lab_scheduler:run_forever"
+resurgam-host-probe = "resurgam_api.host_capabilities:main"
+resurgam-update = "resurgam_api.updates.updater:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.16.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/resurgam_api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+resurgam-worker = { path = "../restore-worker", editable = true }
+
+[tool.ruff]
+# Matches the width the existing code is already written to.
+line-length = 120
+
+[tool.ruff.lint]
+# Rules the code's own `# noqa: <code> - <reason>` comments already document
+# intentional exceptions to -- enabled so those comments mean something
+# (and stay checked) instead of being flagged as unused.
+extend-select = ["BLE001", "N802", "A002", "F403"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom (`db: Session = Depends(get_db)`), not a
+# shared-mutable-default bug.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body",
+    "fastapi.Header", "fastapi.Security", "fastapi.File", "fastapi.Form",
+]

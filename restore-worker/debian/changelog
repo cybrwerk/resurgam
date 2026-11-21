@@ -1,0 +1,264 @@
+resurgam-worker (0.3.0-1) unstable; urgency=medium
+
+  * Release 0.3.0, the first public beta (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 21 Nov 2026 18:00:00 +0000
+
+resurgam-worker (0.2.16-1) unstable; urgency=medium
+
+  * Release 0.2.16 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 21 Nov 2026 17:00:00 +0000
+
+resurgam-worker (0.2.15-1) unstable; urgency=medium
+
+  * Release 0.2.15 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 21 Nov 2026 15:00:00 +0000
+
+resurgam-worker (0.2.14-1) unstable; urgency=medium
+
+  * Release 0.2.14 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 21 Nov 2026 00:00:00 +0000
+
+resurgam-worker (0.2.13-1) unstable; urgency=medium
+
+  * Release 0.2.13 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 17 Nov 2026 22:00:00 +0000
+
+resurgam-worker (0.2.12-1) unstable; urgency=medium
+
+  * Release 0.2.12 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 14 Nov 2026 20:00:00 +0000
+
+resurgam-worker (0.2.11-1) unstable; urgency=medium
+
+  * Release 0.2.11 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 14 Nov 2026 12:00:00 +0000
+
+resurgam-worker (0.2.10-1) unstable; urgency=medium
+
+  * Release 0.2.10 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Fri, 13 Nov 2026 16:00:00 +0000
+
+resurgam-worker (0.2.9-1) unstable; urgency=medium
+
+  * Release 0.2.9 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Thu, 12 Nov 2026 22:00:00 +0000
+
+resurgam-worker (0.2.8-1) unstable; urgency=medium
+
+  * Release 0.2.8 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 03 Nov 2026 08:00:00 +0000
+
+resurgam-worker (0.2.7-1) unstable; urgency=medium
+
+  * Release 0.2.7 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 13 Oct 2026 08:00:00 +0000
+
+resurgam-worker (0.2.6-1) unstable; urgency=medium
+
+  * Release 0.2.6 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sun, 11 Oct 2026 20:00:00 +0000
+
+resurgam-worker (0.2.5-1) unstable; urgency=medium
+
+  * Release 0.2.5 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sun, 11 Oct 2026 18:00:00 +0000
+
+resurgam-worker (0.2.4-1) unstable; urgency=medium
+
+  * Release 0.2.4 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 10 Oct 2026 08:00:00 +0000
+
+resurgam-worker (0.2.3-1) unstable; urgency=medium
+
+  * Release 0.2.3 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Wed, 07 Oct 2026 20:04:35 +0000
+
+resurgam-worker (0.2.2-1) unstable; urgency=medium
+
+  * Release 0.2.2 (see CHANGELOG.md in the repository root): the lab agent and
+    prober now ship with every appliance image and update bundle.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Wed, 07 Oct 2026 20:00:03 +0000
+
+resurgam-worker (0.2.1-1) unstable; urgency=medium
+
+  * resurgam-lab-prober gains two new Level 2/3 check types, added live
+    (2026-09-22) after a real, decisive finding on the first fully
+    successful Windows Recovery Lab run: `icmp` failed outright (Windows
+    Firewall's default profile blocks ICMP echo), but `ip neigh` showed
+    the guest had answered ARP the entire time -- ARP resolution happens
+    in the kernel below any userspace firewall, making it a more
+    reliable "is this host actually up" signal than ICMP for exactly
+    this common case.
+    - `arp` (Level 2): triggers ARP resolution via a `ping` (its own
+      ICMP result is ignored, only used as a trigger) then reads `ip
+      neigh show`'s resulting state -- no new `arping` binary needed.
+    - `nmap_scan` (Level 3): a bounded top-100-ports `nmap` scan (never
+      an operator-suppliable range or nmap script, keeping with the "no
+      arbitrary scripts" design), reporting real open-port evidence in
+      the result detail. New dependency: `nmap`.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 22 Sep 2026 00:00:00 +0000
+
+resurgam-worker (0.2.0-3) unstable; urgency=medium
+
+  * Fixed a real bug found live (2026-09-22) in the same real Windows
+    restore attempt that -2 targeted: `meta` (part of the original
+    guest's real backed-up config, carrying `creation-qemu`/`ctime`
+    housekeeping info) is not a valid `qm create` option at all --
+    `qm help create` confirms it only exists as an unrelated sub-key of
+    `--cicustom` -- so passing the original config through wholesale
+    made `qm create` fail outright ("Unknown option: meta") before a VM
+    was ever created. `lock`/`digest`/`parent` are the same class of
+    informational/computed-state field and are now stripped
+    defensively too, even though only `meta` has actually been observed
+    live so far.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 22 Sep 2026 00:00:00 +0000
+
+resurgam-worker (0.2.0-2) unstable; urgency=medium
+
+  * Fixed a real, decisive bug found live (2026-09-22) during the first
+    actual Windows Recovery Lab boot: `resurgam-lab-agent` built the
+    member's VM config from scratch (memory/cores/net0/scsi0 only),
+    hardcoding `scsi0` as the disk slot regardless of what the original
+    guest actually used. It happened to boot a Linux guest that used
+    virtio-scsi, but a real Windows guest (backed up on `sata0`) fell
+    straight into Windows's repair/recovery mode -- confirmed via the
+    real console. The synthetic config had also silently dropped
+    `machine` type, NIC model, `ostype`, real socket/core/memory counts,
+    and the `smbios1` UUID, any of which Windows can treat as a
+    boot-critical hardware change.
+    `resurgam-lab-agent` now fetches the *original* guest's real config
+    from the backup itself (every PBS VM backup carries its own
+    `qemu-server.conf.blob`, fetched via
+    `proxmox-backup-client restore <snapshot> qemu-server.conf.blob -`)
+    and reconstructs the lab VM from it wholesale -- only remapping the
+    disk slot the mapped archive actually belongs to (derived from the
+    archive's own filename, `drive-<slot>.img.fidx`) to the local COW
+    overlay, and `net0`'s bridge to the run's isolated Lab VNet
+    (preserving the original NIC model/MAC, dropping `firewall=1` since
+    no rules exist for an ad-hoc VNet). Other disk/NIC slots from the
+    original are dropped -- Phase A only ever maps one archive, and
+    passing the rest through would reference production storage IDs the
+    Lab cluster doesn't (or, worse, coincidentally does) have.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 22 Sep 2026 00:00:00 +0000
+
+resurgam-worker (0.2.0-1) unstable; urgency=medium
+
+  * Recovery Lab Phase B (3-tier probe hierarchy, ADR 0019): this source
+    package is renamed from resurgam-lab-agent to resurgam-worker and
+    now produces TWO binary packages from one tree -- resurgam-lab-agent
+    (unchanged) and the new resurgam-lab-prober (the per-run probe
+    appliance's own daemon + router/DHCP/firewall bootstrap).
+  * resurgam-lab-agent gains a real bug fix found live (2026-09-21)
+    while building this feature: `create_vm`'s `qm create` never passed
+    `--agent 1`, so QEMU never exposed the guest-agent virtio-serial
+    channel at all -- `POST .../agent/ping` always failed with "No QEMU
+    guest agent configured" regardless of whether the guest OS actually
+    had qemu-guest-agent installed. Confirmed against the first real
+    Recovery Lab member VM this session booted (111), which had no
+    `agent` key in its config at all.
+  * resurgam-lab-agent also gains the write-side of a second
+    responsibility: writing each Lab run's probe appliance cloud-init
+    snippet to local disk (`pvesm path`), since PVE has no REST endpoint
+    to upload a snippet file (confirmed live 2026-09-21 -- the upload
+    API's `content` param rejects "snippets" outright, even with the
+    storage's own content-type list including it).
+  * resurgam-lab-prober is new -- build-verified (2026-09-22, same host
+    as this session's earlier dh-virtualenv builds): both packages build
+    cleanly and carry their expected content, confirmed via
+    `dpkg-deb -c`. A real packaging bug found in the same pass:
+    `dh_installsystemd --name=X` looks for `debian/<package>.X.service`,
+    not `debian/X.service` -- the first attempt used the wrong filename
+    for `resurgam-lab-router.service` (renamed to
+    `debian/resurgam-lab-prober.resurgam-lab-router.service`) and,
+    worse, passed a redundant `--name` for each package's own
+    default-matching unit too, which silently installed *no* systemd
+    units into *either* package. Fixed by dropping the redundant
+    `--name` calls and using the documented filename convention for the
+    one genuinely extra unit.
+  * NOT yet live-verified against a real booted appliance -- in
+    particular the router bootstrap script's interface-discovery-by-IP
+    approach (`resurgam-lab-router-bootstrap`, finding the net0 guest
+    interface by matching GATEWAY_IP rather than assuming a fixed name)
+    and the dnsmasq/nftables config it generates need confirming against
+    a real boot before trusting this package for an actual Lab run.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 22 Sep 2026 00:00:00 +0000
+
+resurgam-lab-agent (0.1.0-4) unstable; urgency=medium
+
+  * Fixed a second real bug found in the same live Recovery Lab run,
+    immediately after the -3 fix let `map_snapshot` actually reach a
+    real `proxmox-backup-client map` call: the "Image '...' mapped on
+    /dev/loopN" confirmation line lands on the process's *stderr*, not
+    stdout, on this PBS client build -- `map_snapshot` only ever
+    searched `result.stdout` for the device path, so a genuinely
+    successful map was always treated as a parse failure (leaving the
+    device mapped and orphaned, since the code believed the map never
+    happened). Now searches stdout first, falling back to stderr.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Mon, 21 Sep 2026 00:00:00 +0000
+
+resurgam-lab-agent (0.1.0-3) unstable; urgency=medium
+
+  * Fixed a real bug found during the first actual Recovery Lab run
+    against a real PBS instance: `proxmox-backup-client` rejects
+    `--repository` combined with a separate `--port` flag outright
+    ("mutually exclusive"). The port now lives inside the repository
+    string itself (`_pbs_repository`'s own PBS-native syntax,
+    `[[user@]server[:port]:]datastore`) instead of being passed as
+    `--port` in `pbs_client.map.map_snapshot`/`list_snapshot_archives`,
+    which no longer accept a `port` parameter at all -- it was never
+    usable together with `--repository` to begin with.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Mon, 21 Sep 2026 00:00:00 +0000
+
+resurgam-lab-agent (0.1.0-2) unstable; urgency=medium
+
+  * Build-verified for real (Debian 13/trixie, amd64) -- two bugs the
+    previous unverified packaging actually had:
+    - debian/rules' dh_virtualenv override invokes the external
+      `virtualenv` binary, not merely importable via Python -- missing
+      from a bare debhelper/dh-virtualenv install (dh-virtualenv itself
+      doesn't pull it in as a hard dependency on trixie). No fix needed
+      in this repo -- document as a build-host prerequisite:
+      `apt install virtualenv` alongside debhelper/dh-virtualenv.
+    - debian/resurgam-lab-agent.install's second column is a destination
+      *directory* in dh_install's syntax, not a destination path -- the
+      original `... etc/default/resurgam-lab-agent` line installed the
+      file nested one level too deep
+      (etc/default/resurgam-lab-agent/resurgam-lab-agent.default) and
+      broke dh_fixperms. Removed the file entirely: dh_installinit
+      already auto-installs a file literally named
+      debian/<package>.default to /etc/default/<package> by convention,
+      making the explicit mapping both wrong and redundant.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Mon, 21 Sep 2026 00:00:00 +0000
+
+resurgam-lab-agent (0.1.0-1) unstable; urgency=medium
+
+  * Initial packaging: Recovery Lab probe agent (ADR 0019). Written but
+    not build-verified in this environment (no debhelper/dh-virtualenv
+    and no root available where this was authored) -- confirm with a
+    real `dpkg-buildpackage` run on a Debian/PVE build host before
+    trusting the resulting .deb.
+
+ -- RESURGAM <noreply@resurgam.invalid>  Sat, 19 Sep 2026 00:00:00 +0000

@@ -1,0 +1,90 @@
+/* Inline checkbox inside the filter toolbar: sits on the inputs'
+   baseline rather than the labels'. */
+
+/* Framework control badges, shown in the panel's title strip. */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.controlBadge {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+}
+
+.summaryRow {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.disclaimer {
+  color: var(--status-warning);
+  font-size: 0.8rem;
+  margin: 0.75rem 0 0;
+}
+
+.summaryHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.tierBadge {
+  display: inline-block;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.kpiRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.timeline {
+  margin-bottom: 0.5rem;
+  max-width: 40rem;
+}
+
+.legStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.leg {
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  min-width: 11rem;
+  font-size: 0.8rem;
+}
+
+.legTitle {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.legAttestation {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+/* "Generating PDF…" / failure notice under the header. */
+.pdfStatus {
+  margin-block-end: var(--space-3);
+}
