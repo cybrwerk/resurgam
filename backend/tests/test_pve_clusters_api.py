@@ -454,7 +454,8 @@ def test_list_guests_returns_live_data(client, platform_admin_headers, monkeypat
         pve_clusters_module,
         "list_guests",
         lambda *a, **kw: GuestListResult(
-            reachable=True, guests=[RemoteGuest(vmid=100, node="pve1", guest_type="qemu", name="test", status="stopped")]
+            reachable=True,
+            guests=[RemoteGuest(vmid=100, node="pve1", guest_type="qemu", name="test", status="stopped")],
         ),
     )
 

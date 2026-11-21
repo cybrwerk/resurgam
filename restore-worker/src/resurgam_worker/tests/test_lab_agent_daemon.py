@@ -57,10 +57,7 @@ def test_pbs_repository_format():
     # ([[user@]server[:port]:]datastore) -- PBS's CLI rejects
     # --repository combined with a separate --port flag, confirmed live
     # (2026-09-21) against a real Recovery Lab run.
-    assert (
-        daemon._pbs_repository("resurgam@pbs!dev", JOB)
-        == "resurgam@pbs!dev@pbs1.example.internal:8007:backup-store"
-    )
+    assert daemon._pbs_repository("resurgam@pbs!dev", JOB) == "resurgam@pbs!dev@pbs1.example.internal:8007:backup-store"
 
 
 def test_pbs_snapshot_path_format():

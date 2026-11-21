@@ -274,7 +274,9 @@ def test_extract_to_file_streams_a_single_file_like_extract_to_bytes(monkeypatch
 
     monkeypatch.setattr(file_restore, "_run_guarded", fake)
     out = tmp_path / "job.bin"
-    file_restore.extract_to_file(REPO, SNAPSHOT, "/drive-scsi0.img.fidx/part/2/etc/hosts", str(out), namespace="tenant-a")
+    file_restore.extract_to_file(
+        REPO, SNAPSHOT, "/drive-scsi0.img.fidx/part/2/etc/hosts", str(out), namespace="tenant-a"
+    )
 
     assert captured["command"] == [
         "/usr/bin/proxmox-file-restore",
