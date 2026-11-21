@@ -886,12 +886,40 @@ def test_scan_start_is_retried_after_a_guest_agent_timeout(monkeypatch):
             raise PveCommandFailedError(["qm"], 255, "VM 107 qga command 'guest-exec' failed - got timeout")
         return 42
 
+    waits = []
     monkeypatch.setattr(daemon, "guest_exec_launch", launch)
     monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    monkeypatch.setattr(daemon, "wait_for_guest_agent", lambda vmid, **kw: waits.append(vmid))
 
     daemon._launch_enumeration(107, ["/bin/sh", "-c", "x"])
 
     assert calls == [107, 107, 107]
+    assert waits == [107, 107]  # waits for the guest agent before every retry
+
+
+def test_scan_start_is_retried_while_the_guest_agent_restarts(monkeypatch):
+    errors = iter(
+        [
+            "VM 107 qga command 'guest-exec' failed - got timeout",
+            "QEMU guest agent is not running",
+        ]
+    )
+    calls = []
+
+    def launch(vmid, args):
+        calls.append(vmid)
+        message = next(errors, None)
+        if message:
+            raise PveCommandFailedError(["qm"], 255, message)
+        return 42
+
+    monkeypatch.setattr(daemon, "guest_exec_launch", launch)
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    monkeypatch.setattr(daemon, "wait_for_guest_agent", lambda vmid, **kw: None)
+
+    daemon._launch_enumeration(107, ["/bin/sh", "-c", "x"])
+
+    assert len(calls) == 3
 
 
 def test_scan_start_other_errors_are_not_retried(monkeypatch):
@@ -899,7 +927,7 @@ def test_scan_start_other_errors_are_not_retried(monkeypatch):
 
     def launch(vmid, args):
         calls.append(vmid)
-        raise PveCommandFailedError(["qm"], 255, "QEMU guest agent is not running")
+        raise PveCommandFailedError(["qm"], 255, "VM 107 not running")
 
     monkeypatch.setattr(daemon, "guest_exec_launch", launch)
     monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
