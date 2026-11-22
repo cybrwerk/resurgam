@@ -473,11 +473,15 @@ def process_guest_exec_live_job(job: FileIndexJob, client: LabAgentClient) -> No
             logger.warning("lab-agent: could not report failure for job %s", job.id, exc_info=True)
 
 
-# A start whose guest-agent call timed out is retried; the scan's own lock
-# (`file_index._LINUX_LOCK_PATH` / `_WINDOWS_LOCK_PATH`) makes a repeated start
-# exit at once if the first one did run after all.
+# A start whose guest-agent call failed transiently is retried; the scan's own
+# lock (`file_index._LINUX_LOCK_PATH` / `_WINDOWS_LOCK_PATH`) makes a repeated
+# start exit at once if the first one did run after all. Seen live 2026-11-21 on
+# a guest booting slowly from its backup: first `guest-exec` "got timeout", then
+# "QEMU guest agent is not running" while the agent restarted in the guest.
 LAUNCH_ATTEMPTS = 4
 LAUNCH_RETRY_SECONDS = 15
+LAUNCH_AGENT_WAIT_SECONDS = 180
+_TRANSIENT_LAUNCH_ERRORS = ("got timeout", "guest agent is not running")
 
 
 def _launch_enumeration(vmid: int, command_args: list[str]) -> None:
@@ -486,10 +490,11 @@ def _launch_enumeration(vmid: int, command_args: list[str]) -> None:
             guest_exec_launch(vmid, command_args)
             return
         except PveCommandFailedError as exc:
-            if "got timeout" not in str(exc) or attempt == LAUNCH_ATTEMPTS:
+            if not any(marker in str(exc) for marker in _TRANSIENT_LAUNCH_ERRORS) or attempt == LAUNCH_ATTEMPTS:
                 raise
-            logger.info("lab-agent: starting the file scan on VM %s timed out, retrying (%d)", vmid, attempt)
+            logger.info("lab-agent: starting the file scan on VM %s failed (%s), retrying (%d)", vmid, exc, attempt)
             time.sleep(LAUNCH_RETRY_SECONDS)
+            wait_for_guest_agent(vmid, timeout_seconds=LAUNCH_AGENT_WAIT_SECONDS)
 
 
 def process_guest_exec_ephemeral_job(job: FileIndexJob, config: LabAgentConfig, client: LabAgentClient) -> None:
