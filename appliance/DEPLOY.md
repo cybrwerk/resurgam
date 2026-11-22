@@ -106,6 +106,11 @@ At this point `https://<RESURGAM_DOMAIN>/` is reachable (self-signed cert by def
 is up, but nothing can actually index files or restore a VM disk yet -- that needs the native
 workers below.
 
+The appliance only answers on `RESURGAM_DOMAIN`. Opened under any other name or IP (another DNS
+name, a port forward, a reverse proxy), it shows a short page saying which address to use; API
+calls get `421` with the code `unknown_host`. To use a different address, change
+`RESURGAM_DOMAIN` in `.env` and run `docker compose up -d` again.
+
 ## 5. Install the native workers
 
 **Install the Proxmox file-restore tools and host configuration** -- all four Proxmox packages

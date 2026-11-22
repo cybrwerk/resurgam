@@ -44,3 +44,44 @@
 		file_server
 	}
 }
+
+# Every other hostname. Without this block Caddy answers a request whose Host
+# matches no site with an empty 200 -- found when the 0.3.0 image was opened
+# through a port forward (2026-11-21): a blank page and no hint why. The TLS
+# handshake still uses the RESURGAM_DOMAIN certificate (default_sni above), so
+# the browser shows its usual warning first and then this explanation.
+# Deliberately no redirect to RESURGAM_DOMAIN: behind a port forward or proxy
+# that address is often not reachable from the client. The request's Host is
+# never echoed back (it is client-controlled and would go out unescaped).
+https:// {
+	tls internal
+
+	header ?X-Content-Type-Options nosniff
+	header ?X-Frame-Options DENY
+
+	handle /api/* {
+		header Content-Type application/json
+		respond `{"code":"unknown_host","message":"This RESURGAM appliance only answers on {$RESURGAM_DOMAIN:localhost}, not on the address this request used. Use https://{$RESURGAM_DOMAIN:localhost}/, or set RESURGAM_DOMAIN in /opt/resurgam/appliance/.env to the name or IP you use and run 'docker compose up -d' there.","details":null}` 421
+	}
+
+	handle {
+		header Content-Type "text/html; charset=utf-8"
+		respond <<HTML
+			<!doctype html>
+			<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>RESURGAM: wrong address</title>
+			<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#1d2a2e}code{background:#eef2f3;padding:.1rem .3rem;border-radius:3px}a{color:#0b5d6b}</style>
+			</head><body>
+			<h1>This RESURGAM appliance answers on another address</h1>
+			<p>The address you opened is not the one this appliance is configured for: <code>{$RESURGAM_DOMAIN:localhost}</code>.</p>
+			<p><a href="https://{$RESURGAM_DOMAIN:localhost}/">Open https://{$RESURGAM_DOMAIN:localhost}/</a></p>
+			<p>To use the address you opened instead: on the appliance, set <code>RESURGAM_DOMAIN</code> to that name or IP in <code>/opt/resurgam/appliance/.env</code> and run <code>docker compose up -d</code> in that folder. Details: <code>appliance/DEPLOY.md</code>.</p>
+			</body></html>
+			HTML 421
+	}
+}
+
+# Plain HTTP for any other hostname: on to HTTPS, where the page above explains.
+http:// {
+	redir https://{host}{uri}
+}
