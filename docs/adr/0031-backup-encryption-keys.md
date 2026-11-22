@@ -71,6 +71,18 @@ Three stages. Stages 1 and 2 only read from PBS/PVE; stage 3 writes to PVE.
 - **Key sheet**: per key, the printable paper key (`proxmox-backup-client key paperkey`, text/QR) as a
   PDF; an alarm until an admin confirms "key sheet stored safely".
 - The ADR 0022 per-datastore key is migrated into the new store by its fingerprint.
+- **Keys are downloadable** (required by the user, 2026-11-22: for migration and as a backup copy).
+  This deliberately ends ADR 0022's write-only rule for keys:
+  - **Per key**: the original keyfile exactly as uploaded or generated (PBS JSON format, usable
+    directly with `proxmox-backup-client --keyfile` or as a PVE storage `encryption-key`); a
+    password-protected key keeps its protection.
+  - **Export of all keys**: one file encrypted with a passphrase the admin chooses (never plaintext),
+    importable into another RESURGAM — the migration path to a new appliance.
+  - **Protection**: only in a signed-in session, never with an API token; a fresh confirmation
+    (password or MFA) right before the download; every download and export in the audit log (who,
+    when, which fingerprints) and an alarm mail to the platform admins.
+  - **Who**: platform admins. Whether tenant admins may download their own tenant's keys is open
+    (proposal: off by default, switchable per tenant).
 
 ### Stage 3 — Encryption on PVE storages (later, separate step)
 
@@ -84,7 +96,8 @@ Three stages. Stages 1 and 2 only read from PBS/PVE; stage 3 writes to PVE.
 
 ## Not in scope
 
-- RESURGAM is not the key's backup. The key sheet (or the master key) is. The UI says so.
+- RESURGAM is not the only copy of a key. The key sheet, a downloaded keyfile or the master key must
+  exist outside RESURGAM; the UI says so.
 - Moving existing backups to another key (re-encryption) — PBS cannot do that in place.
 - Restores of encrypted VMs through PVE itself still need the key on the PVE storage; RESURGAM only
   shows whether it is there.
