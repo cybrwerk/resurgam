@@ -81,8 +81,9 @@ Three stages. Stages 1 and 2 only read from PBS/PVE; stage 3 writes to PVE.
   - **Protection**: only in a signed-in session, never with an API token; a fresh confirmation
     (password or MFA) right before the download; every download and export in the audit log (who,
     when, which fingerprints) and an alarm mail to the platform admins.
-  - **Who**: platform admins. Whether tenant admins may download their own tenant's keys is open
-    (proposal: off by default, switchable per tenant).
+  - **Who** (decided by the user, 2026-11-22): platform admins always. Tenant admins may download the
+    keys assigned to their own tenant only if a platform admin has allowed it for that tenant (off
+    by default; the switch itself is audited). The all-keys export stays platform-admin only.
 
 ### Stage 3 — Encryption on PVE storages (later, separate step)
 
