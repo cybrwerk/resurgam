@@ -14,6 +14,7 @@ import { Panel } from "./Panel";
 import { QueryState } from "./QueryState";
 import { StatusBadge } from "./StatusBadge";
 import styles from "./ApiTokens.module.css";
+import type { TFunction } from "i18next";
 
 /** Personal API tokens (docs/adr/0029): the own-token panel on the
  * Profile page and the all-users panel for platform admins. */
@@ -22,13 +23,12 @@ const MY_TOKENS_KEY = ["api-tokens", "mine"];
 const ALL_TOKENS_KEY = ["api-tokens", "all"];
 const EXPIRY_PRESETS = [30, 90, 180, 365];
 
-type TFn = (key: string, options?: Record<string, unknown>) => string;
 
 function grantKey(g: { role: string; scope_type: string; scope_id: string | null }): string {
   return `${g.role}|${g.scope_type}|${g.scope_id ?? ""}`;
 }
 
-export function grantLabel(grant: ApiTokenGrant, t: TFn): string {
+export function grantLabel(grant: ApiTokenGrant, t: TFunction): string {
   const scope =
     grant.scope_type === "global" ? t("apiTokens.scopeGlobal") : (grant.scope_name ?? grant.scope_id ?? grant.scope_type);
   return `${grant.role} — ${scope}`;
