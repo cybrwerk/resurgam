@@ -755,12 +755,12 @@
     "methodType": {
       "external_mount": "Externes Einhängen (Standard)",
       "guest_exec_live": "Guest-Exec (live)",
-      "guest_exec_ephemeral": "Guest-Exec (Wegwerf-Klon)"
+      "guest_exec_ephemeral": "Guest-Exec (Wegwerf-Klon, experimentell)"
     },
     "methodHint": {
       "external_mount": "PBS-Datei-Restore-/Katalog-Tools durchsuchen den Snapshot von aussen — funktioniert für jeden Backup-Typ, kann aber nicht in eine verschlüsselte Festplatte sehen und hat keine echte inkrementelle Indexierung.",
       "guest_exec_live": "Ein PVE-Hookscript indexiert die laufende Produktions-VM direkt nach Abschluss ihres eigenen echten Backups. Echt inkrementell; läuft gegen den laufenden Gast, nicht gegen einen Klon. Nur VMs.",
-      "guest_exec_ephemeral": "Startet einen Wegwerf-Klon des Snapshots, indexiert ihn, löscht ihn wieder. Berührt nie die Produktion; pro Durchlauf aufwendiger, da ein echter Boot nötig ist. Nur VMs."
+      "guest_exec_ephemeral": "Experimentell. Startet einen Wegwerf-Klon des Snapshots, indexiert ihn, löscht ihn wieder. Berührt nie die Produktion, aber jeder Durchlauf ist ein vollständiger Boot direkt aus PBS: Das braucht schnelle Lesezugriffe auf PBS, auf langsamem PBS-Speicher können Läufe fehlschlagen. Gedacht für Disks, die RESURGAM nicht von aussen lesen kann (z. B. verschlüsselte). Für gewöhnliche VMs External Mount verwenden. Nur VMs."
     },
     "guestExecLiveClusterRequired": "Der PVE-Cluster, auf dem diese VM läuft, ist für die Live-Guest-Exec-Methode erforderlich.",
     "saveMethod": "Methode speichern",

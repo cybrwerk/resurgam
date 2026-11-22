@@ -587,6 +587,7 @@ def _patch_ephemeral_boot(monkeypatch, *, ostype="l26"):
     monkeypatch.setattr(daemon, "create_vm", lambda *a, **kw: None)
     monkeypatch.setattr(daemon, "start_vm", lambda vmid: None)
     monkeypatch.setattr(daemon, "wait_for_guest_agent", lambda vmid, **kw: None)
+    monkeypatch.setattr(daemon, "_wait_for_linux_boot", lambda vmid, **kw: None)  # tested on its own below
     monkeypatch.setattr(daemon, "stop_vm", lambda vmid: None)
 
 
@@ -935,3 +936,43 @@ def test_scan_start_other_errors_are_not_retried(monkeypatch):
     with pytest.raises(PveCommandFailedError):
         daemon._launch_enumeration(107, ["/bin/sh", "-c", "x"])
     assert calls == [107]
+
+
+# --- waiting for an ephemeral copy's boot (live finding 2026-11-22) ------------
+
+
+def _exec_states(monkeypatch, states):
+    calls = iter(states)
+
+    def fake_exec(vmid, args, **kw):
+        state = next(calls)
+        if isinstance(state, Exception):
+            raise state
+        return {"exitcode": 0 if state == "running" else 1, "out-data": f"{state}\n"}
+
+    monkeypatch.setattr(daemon, "guest_exec", fake_exec)
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+
+
+def test_linux_boot_wait_returns_once_systemd_is_done(monkeypatch):
+    _exec_states(monkeypatch, ["starting", PveCommandFailedError(["qm"], 255, "got timeout"), "starting", "degraded"])
+    daemon._wait_for_linux_boot(107, timeout_seconds=60)
+
+
+def test_linux_boot_wait_fails_fast_on_emergency_mode(monkeypatch):
+    _exec_states(monkeypatch, ["starting", "maintenance"])
+    with pytest.raises(daemon.GuestBootFailedError, match="emergency mode"):
+        daemon._wait_for_linux_boot(107, timeout_seconds=60)
+
+
+def test_linux_boot_wait_gives_up_quietly_after_the_timeout(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(daemon.time, "monotonic", lambda: clock[0])
+
+    def fake_exec(vmid, args, **kw):
+        clock[0] += 400
+        return {"exitcode": 1, "out-data": "starting\n"}
+
+    monkeypatch.setattr(daemon, "guest_exec", fake_exec)
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    daemon._wait_for_linux_boot(107, timeout_seconds=1000)  # no exception
