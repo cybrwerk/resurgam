@@ -755,12 +755,12 @@
     "methodType": {
       "external_mount": "External mount (default)",
       "guest_exec_live": "Guest-exec (live)",
-      "guest_exec_ephemeral": "Guest-exec (ephemeral clone)"
+      "guest_exec_ephemeral": "Guest-exec (ephemeral clone, experimental)"
     },
     "methodHint": {
       "external_mount": "PBS file-restore/catalog tools browse the snapshot externally -- works for every backup type, but can't see inside an encrypted disk and has no true incremental indexing.",
       "guest_exec_live": "A PVE hookscript indexes the live production VM right after its own real backup completes. Genuinely incremental; runs against the live guest, not a clone. VM only.",
-      "guest_exec_ephemeral": "Boots a disposable clone of the snapshot, indexes it, destroys it. Never touches production; heavier per run since it's a real boot. VM only."
+      "guest_exec_ephemeral": "Experimental. Boots a disposable clone of the snapshot, indexes it, destroys it. Never touches production, but every run is a full boot straight from PBS: it needs fast PBS reads, and on slow PBS storage runs can fail. Meant for disks RESURGAM can't read from outside (e.g. encrypted). For ordinary VMs use External mount. VM only."
     },
     "guestExecLiveClusterRequired": "The PVE cluster hosting this VM is required for the live guest-exec method.",
     "saveMethod": "Save method",

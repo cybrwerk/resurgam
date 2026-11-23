@@ -66,8 +66,11 @@ Older versions may work but are not tested. Please report what you run in your b
   for good**: the guest gets I/O errors, even after PBS is back. RESURGAM marks such a recovery as
   failed within about two minutes; only *Discard* is left then. Move the VM to storage soon, and
   don't restart PBS meanwhile. VMs only, no containers.
-- **Ephemeral file indexing** (a temporary copy of the VM started from the backup) depends on how
-  fast that copy boots from PBS. On slow PBS storage, large guests can still time out.
+- **Ephemeral file indexing** (a temporary copy of the VM booted from the backup) is
+  **experimental**. Every run is a full boot straight from PBS, so it needs fast PBS reads: on slow
+  PBS storage (e.g. a NAS over iSCSI) the copy's guest agent can stall for minutes and the run
+  fails. It is meant for disks RESURGAM can't read from outside, such as encrypted ones. For
+  ordinary VMs use the default method, External mount.
 - **Release update source** is a newer feature and less field-tested than the rest. Please report
   anything unexpected.
 

@@ -477,10 +477,12 @@ def process_guest_exec_live_job(job: FileIndexJob, client: LabAgentClient) -> No
 # lock (`file_index._LINUX_LOCK_PATH` / `_WINDOWS_LOCK_PATH`) makes a repeated
 # start exit at once if the first one did run after all. Seen live 2026-11-21 on
 # a guest booting slowly from its backup: first `guest-exec` "got timeout", then
-# "QEMU guest agent is not running" while the agent restarted in the guest.
+# "QEMU guest agent is not running" for minutes -- the agent did not crash, it
+# hung on the guest's slow disk (the copy reads it from PBS) while loading the
+# scan's programs. So between attempts, wait generously for it to answer again.
 LAUNCH_ATTEMPTS = 4
 LAUNCH_RETRY_SECONDS = 15
-LAUNCH_AGENT_WAIT_SECONDS = 180
+LAUNCH_AGENT_WAIT_SECONDS = 600
 _TRANSIENT_LAUNCH_ERRORS = ("got timeout", "guest agent is not running")
 
 
@@ -495,6 +497,49 @@ def _launch_enumeration(vmid: int, command_args: list[str]) -> None:
             logger.info("lab-agent: starting the file scan on VM %s failed (%s), retrying (%d)", vmid, exc, attempt)
             time.sleep(LAUNCH_RETRY_SECONDS)
             wait_for_guest_agent(vmid, timeout_seconds=LAUNCH_AGENT_WAIT_SECONDS)
+
+
+# An ephemeral copy boots straight from its backup, so its boot is slow, and
+# its guest agent answers long before the boot is over. Found live 2026-11-22
+# (Ubuntu guest, PBS on iSCSI): the guest agent came up after ~3 min, the boot
+# finished after ~5 min -- in between, apt-daily-upgrade, snapd and friends
+# kept the guest's disk (read from PBS at ~2 MB/s) so busy that the scan's
+# `guest-exec` timed out and the guest agent hung. Started after the boot, the
+# same scan ran fine.
+BOOT_SETTLE_TIMEOUT_SECONDS = 20 * 60
+BOOT_SETTLE_POLL_SECONDS = 15
+_BOOT_DONE_STATES = ("running", "degraded")  # degraded is normal: its network link is down
+_BOOT_FAILED_STATES = ("maintenance",)  # emergency / rescue mode
+
+
+class GuestBootFailedError(RuntimeError):
+    pass
+
+
+def _wait_for_linux_boot(vmid: int, *, timeout_seconds: float = BOOT_SETTLE_TIMEOUT_SECONDS) -> None:
+    """Waits until systemd reports the guest's boot as finished. Gives up
+    quietly after `timeout_seconds` (the scan start is retried anyway) and
+    fails at once if the guest ended up in emergency mode."""
+    deadline = time.monotonic() + timeout_seconds
+    state = "unknown"
+    while time.monotonic() < deadline:
+        try:
+            result = guest_exec(vmid, ["systemctl", "is-system-running"], timeout_seconds=60)
+            state = str(result.get("out-data") or "").strip() or "unknown"
+        except PveClientError:
+            state = "agent busy"
+        if state in _BOOT_DONE_STATES:
+            logger.info("lab-agent: VM %s finished booting (%s)", vmid, state)
+            return
+        if state in _BOOT_FAILED_STATES:
+            raise GuestBootFailedError(
+                f"The temporary copy of the VM booted into emergency mode (systemd state '{state}'), so its files "
+                "can't be read. Check that the backup boots, e.g. with a Recovery Lab run."
+            )
+        time.sleep(BOOT_SETTLE_POLL_SECONDS)
+    logger.warning(
+        "lab-agent: VM %s still booting after %ds (%s); starting the scan anyway", vmid, timeout_seconds, state
+    )
 
 
 def process_guest_exec_ephemeral_job(job: FileIndexJob, config: LabAgentConfig, client: LabAgentClient) -> None:
@@ -560,6 +605,8 @@ def process_guest_exec_ephemeral_job(job: FileIndexJob, config: LabAgentConfig, 
         booted = True
         wait_for_guest_agent(job.target_vmid, timeout_seconds=config.guest_exec_agent_wait_timeout_seconds)
         logger.info("lab-agent: guest-exec-ephemeral job %s VM %s agent ready", job.id, job.target_vmid)
+        if ostype.startswith("l"):
+            _wait_for_linux_boot(job.target_vmid)
 
         command_args = build_enumeration_command(ostype, since=claim.since, exclude_patterns=job.exclude_patterns)
         # Cleanup first, as its own confirmed-complete step -- see
@@ -582,7 +629,14 @@ def process_guest_exec_ephemeral_job(job: FileIndexJob, config: LabAgentConfig, 
         )
         client.report_file_index_status(job.id, "completed")
         logger.info("lab-agent: guest-exec-ephemeral job %s completed (%d entries)", job.id, entry_count)
-    except (PbsClientError, PveClientError, LabAgentApiError, UnsupportedOsTypeError, OSError) as exc:
+    except (
+        PbsClientError,
+        PveClientError,
+        LabAgentApiError,
+        UnsupportedOsTypeError,
+        GuestBootFailedError,
+        OSError,
+    ) as exc:
         logger.warning("lab-agent: guest-exec-ephemeral job %s failed: %s", job.id, exc, exc_info=True)
         try:
             client.report_file_index_status(job.id, "failed", error=str(exc))
