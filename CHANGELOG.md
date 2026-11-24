@@ -22,6 +22,14 @@ the signed update bundle, where the appliance's Updates page shows it before you
   whose key RESURGAM does not have; keys without a confirmed copy outside RESURGAM. Keys uploaded per
   datastore before are moved into the store automatically. Starting an Instant Recovery, Disk Mount
   or lab run on a backup whose key is missing now says so up front.
+- **Key downloads resist password guessing**: a wrong password or authenticator code when confirming
+  a key download, key sheet or export is written to the audit log (`step_up_confirmation_failed`);
+  after 5 within 15 minutes that account cannot confirm anything until the 15 minutes have passed
+  (API: `429 confirmation_locked`).
+- **Host backups with other archive names**: files from a host backup whose archive is not called
+  `root.pxar` (for example `proxmox-backup-client backup data.pxar:/srv`) can now be downloaded,
+  zipped and indexed -- before, browsing worked but every download failed. A host backup with several
+  archives shows each one as a top-level folder.
 - **Wrong address**: opened under any name or IP other than `RESURGAM_DOMAIN`, the appliance now says
   which address to use instead of showing an empty page (API: `421 unknown_host`).
 - **Ephemeral file indexing** is marked experimental. It waits for the temporary copy to finish

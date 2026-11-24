@@ -337,7 +337,14 @@ def delete_encryption_key(
 
 @router.post(
     "/{key_id}/download",
-    responses={200: {"content": {"application/json": {}}, "description": "The keyfile, exactly as stored."}},
+    responses={
+        200: {"content": {"application/json": {}}, "description": "The keyfile, exactly as stored."},
+        403: {
+            "description": "`confirmation_required` / `confirmation_failed` (see `confirmation`), or "
+            "`key_download_not_allowed`."
+        },
+        429: {"description": "`confirmation_locked`: too many wrong passwords or codes in 15 minutes."},
+    },
 )
 def download_encryption_key(
     key_id: uuid.UUID,
@@ -371,7 +378,14 @@ def download_encryption_key(
 
 @router.post(
     "/{key_id}/key-sheet",
-    responses={200: {"content": {"application/pdf": {}}, "description": "One printable A4 page."}},
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "One printable A4 page."},
+        403: {
+            "description": "`confirmation_required` / `confirmation_failed` (see `confirmation`), or "
+            "`key_download_not_allowed`."
+        },
+        429: {"description": "`confirmation_locked`: too many wrong passwords or codes in 15 minutes."},
+    },
 )
 def download_key_sheet(
     key_id: uuid.UUID,
@@ -441,7 +455,14 @@ def confirm_key_copy(
 
 @router.post(
     "/export",
-    responses={200: {"content": {"application/json": {}}, "description": "The passphrase-encrypted export file."}},
+    responses={
+        200: {"content": {"application/json": {}}, "description": "The passphrase-encrypted export file."},
+        403: {
+            "description": "`confirmation_required` / `confirmation_failed` (see `confirmation`), or "
+            "the caller is not a platform admin."
+        },
+        429: {"description": "`confirmation_locked`: too many wrong passwords or codes in 15 minutes."},
+    },
 )
 def export_encryption_keys(
     body: EncryptionKeyExportRequest,

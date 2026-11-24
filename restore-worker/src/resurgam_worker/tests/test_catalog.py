@@ -5,6 +5,7 @@ capture from that session (the same instance/format documented in
 docs/milestone-1-pbs-pve-api-assumptions.md), not a synthetic guess.
 """
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -392,3 +393,65 @@ def test_extract_file_to_path_rejects_a_directory(monkeypatch, tmp_path):
             REPO, SNAPSHOT, "root.pxar", "/etc", str(tmp_path / "o"), staging_dir=str(tmp_path / "s")
         )
     assert not (tmp_path / "s").exists()
+
+
+# Archive names other than root.pxar (a host backup made with
+# `proxmox-backup-client backup data.pxar:/srv`), several archives in one
+# snapshot, and split archives (`catalog dump` falls back to the .mpxar.didx
+# metadata archives -- proxmox-backup-client catalog.rs).
+def _dump(monkeypatch, listing: str) -> catalog.CatalogDump:
+    monkeypatch.setattr(catalog, "_run", lambda command, **kw: _fake_completed(0, stderr=listing))
+    return catalog.dump_catalog_with_archives(REPO, "host/srv1/2026-11-24T10:00:00Z")
+
+
+def test_single_archive_with_any_name_keeps_clean_paths(monkeypatch):
+    dump = _dump(monkeypatch, 'd "./data.pxar.didx"\nd "./data.pxar.didx/docs"\nf "./data.pxar.didx/docs/a.txt" 3 x\n')
+    assert [e.path for e in dump.entries] == ["/", "/docs", "/docs/a.txt"]
+    assert dump.archives == {"data.pxar.didx": "data.pxar"}
+    assert catalog.archive_for_path(dump.archives, "/docs/a.txt") == ("data.pxar", "/docs/a.txt")
+
+
+def test_several_archives_become_top_level_directories(monkeypatch):
+    dump = _dump(
+        monkeypatch,
+        'd "./root.pxar.didx"\nf "./root.pxar.didx/hosts" 1 x\nd "./etc.pxar.didx"\nf "./etc.pxar.didx/fstab" 2 x\n',
+    )
+    assert [e.path for e in dump.entries] == [
+        "/",
+        "/root.pxar.didx",
+        "/root.pxar.didx/hosts",
+        "/etc.pxar.didx",
+        "/etc.pxar.didx/fstab",
+    ]
+    assert [e.path for e in catalog.list_directory(dump.entries, "/")] == ["/root.pxar.didx", "/etc.pxar.didx"]
+    assert catalog.archive_for_path(dump.archives, "/etc.pxar.didx/fstab") == ("etc.pxar", "/fstab")
+    assert catalog.archive_for_path(dump.archives, "/root.pxar.didx") == ("root.pxar", "/")
+    with pytest.raises(InvalidPathError):
+        catalog.archive_for_path(dump.archives, "/hosts")
+
+
+def test_split_metadata_archive_restores_by_its_pxar_name(monkeypatch):
+    dump = _dump(monkeypatch, 'd "./root.mpxar.didx"\nf "./root.mpxar.didx/etc/hosts" 1 x\n')
+    assert [e.path for e in dump.entries] == ["/", "/etc/hosts"]
+    assert dump.archives == {"root.mpxar.didx": "root.pxar"}
+
+
+def test_list_pxar_archives_reads_snapshot_files(monkeypatch):
+    captured = {}
+
+    def fake_run(command, **kw):
+        captured["command"] = command
+        files = [
+            {"filename": "catalog.pcat1.didx"},
+            {"filename": "index.json.blob"},
+            {"filename": "root.mpxar.didx"},
+            {"filename": "root.ppxar.didx"},
+            {"filename": "data.pxar.didx"},
+        ]
+        return _fake_completed(0, stdout=json.dumps(files))
+
+    monkeypatch.setattr(catalog, "_run", fake_run)
+    archives = catalog.list_pxar_archives(REPO, SNAPSHOT, namespace="tenant-a")
+    assert archives == {"data.pxar.didx": "data.pxar", "root.mpxar.didx": "root.pxar"}
+    assert captured["command"][1:3] == ["snapshot", "files"]
+    assert "--ns" in captured["command"]

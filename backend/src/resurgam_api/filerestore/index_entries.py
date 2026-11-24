@@ -10,9 +10,9 @@ be unit-tested without a database or a subprocess.
 import uuid
 from datetime import UTC, datetime
 
+from resurgam_worker.pbs_client import catalog
+from resurgam_worker.pbs_client.errors import InvalidPathError
 from resurgam_worker.pbs_client.models import CatalogEntry, FileRestoreEntryType, FileRestoreListEntry
-
-from resurgam_api.filerestore.browse import CT_HOST_ARCHIVE_NAME
 
 # Both `dump_catalog()` (CT/host) and `file_restore.list_path()` (VM)
 # include a synthetic entry for the archive/snapshot root itself
@@ -47,20 +47,26 @@ def _epoch_to_datetime(raw: int | None) -> datetime | None:
 
 def catalog_entries_to_rows(
     entries: list[CatalogEntry],
+    archives: dict[str, str],
     *,
     file_index_job_id: uuid.UUID,
     backup_snapshot_id: uuid.UUID,
     backup_group_id: uuid.UUID,
     customer_id: uuid.UUID | None,
 ) -> list[dict]:
-    """CT/host path: every entry in one `dump_catalog()` result shares the
-    same single archive name (PBS's pxar convention -- see
-    `browse.CT_HOST_ARCHIVE_NAME`), unlike the VM path below where each
-    entry's archive is derived from its own path.
+    """CT/host path: `archives` is the `CatalogDump.archives` the entries
+    came from; each row's archive is the pxar archive its path belongs to
+    (`root.pxar` for a CT, any name for a host backup -- see
+    `catalog.archive_for_path`). The VM path below derives it from the path
+    the same way.
     """
     rows = []
     for entry in entries:
         if entry.path == _ROOT_PATH:
+            continue
+        try:
+            archive, _inner = catalog.archive_for_path(archives, entry.path)
+        except InvalidPathError:
             continue
         rows.append(
             {
@@ -68,7 +74,7 @@ def catalog_entries_to_rows(
                 "backup_snapshot_id": backup_snapshot_id,
                 "backup_group_id": backup_group_id,
                 "customer_id": customer_id,
-                "archive": CT_HOST_ARCHIVE_NAME,
+                "archive": archive,
                 "path": entry.path,
                 "filename": _basename(entry.path),
                 "type": entry.type.value,

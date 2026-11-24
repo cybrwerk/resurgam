@@ -53,10 +53,11 @@ from resurgam_api.models.secrets import SecretReference
 from resurgam_api.schemas.filerestore import FileEntryOut
 from resurgam_api.secrets.local_provider import LocalEncryptedSecretsProvider
 
-# The standard content archive name PBS uses for a CT/host (pxar-based)
-# backup — not user-configurable in normal usage, so not worth threading
-# through as a parameter yet.
-CT_HOST_ARCHIVE_NAME = "root.pxar"
+# CT/host (pxar) snapshots: a CT always has `root.pxar`, but a host backup
+# names its archives freely (`proxmox-backup-client backup data.pxar:/srv`)
+# and may hold several. Browse paths and the archive behind them come from
+# `catalog.dump_catalog_with_archives` / `catalog.list_pxar_archives`, mapped
+# back with `catalog.archive_for_path`.
 
 
 class FileRestoreError(Exception):
@@ -363,11 +364,20 @@ def download_file(
                 guard=guard,
             )
         else:
+            archives = catalog.list_pxar_archives(
+                repository,
+                snapshot_id,
+                namespace=group.namespace,
+                token=token,
+                keyfile=keyfile,
+                fingerprint=pbs_fingerprint(db, datastore),
+            )
+            archive, inner_path = catalog.archive_for_path(archives, path)
             catalog.extract_file_to_path(
                 repository,
                 snapshot_id,
-                CT_HOST_ARCHIVE_NAME,
-                path,
+                archive,
+                inner_path,
                 str(part),
                 staging_dir=str(storage.staging_path(settings, job_id)),
                 namespace=group.namespace,
@@ -635,9 +645,10 @@ def _archive_ct(
 ) -> None:
     # `catalog dump` is metadata only and fast (0.55s for 63k entries live, ADR 0011) -- it tells
     # us which selected entries exist and their exact total size before the slow restore.
-    entries = catalog.dump_catalog(
+    dump = catalog.dump_catalog_with_archives(
         repository, snapshot_id, namespace=group.namespace, token=token, keyfile=keyfile, fingerprint=fingerprint
     )
+    entries = dump.entries
     known = {e.path for e in entries}
     present = [p for p in paths if p in known]
     for path in paths:
@@ -661,19 +672,39 @@ def _archive_ct(
     progress("extracting", 0, builder)
     target = staging / "root"
     target.mkdir()
-    failed = catalog.restore_selection(
-        repository,
-        snapshot_id,
-        CT_HOST_ARCHIVE_NAME,
-        str(target),
-        present,
-        namespace=group.namespace,
-        token=token,
-        keyfile=keyfile,
-        fingerprint=fingerprint,
-        timeout=settings.file_restore_extract_timeout_seconds,
-        guard=guard,
-    )
+    # One `restore` per archive. With several archives each one is a top-level directory of the
+    # browse paths (`catalog.CatalogDump`), so it is restored into the directory of that name and
+    # `target / path` lines up with the browse path either way.
+    multiple = len(dump.archives) > 1
+    per_archive: dict[str, list[str]] = {}
+    for path in present:
+        if multiple and path == "/":
+            for top in dump.archives:
+                per_archive.setdefault(top, []).append("/")
+            continue
+        _archive, inner = catalog.archive_for_path(dump.archives, path)
+        top = path.lstrip("/").split("/", 1)[0] if multiple else ""
+        per_archive.setdefault(top, []).append(inner)
+    failed: dict[str, str] = {}
+    for top, inner_paths in per_archive.items():
+        archive_target = target / top if top else target
+        archive_target.mkdir(exist_ok=True)
+        archive_failed = catalog.restore_selection(
+            repository,
+            snapshot_id,
+            dump.archives[top] if top else next(iter(dump.archives.values())),
+            str(archive_target),
+            inner_paths,
+            namespace=group.namespace,
+            token=token,
+            keyfile=keyfile,
+            fingerprint=fingerprint,
+            timeout=settings.file_restore_extract_timeout_seconds,
+            guard=guard,
+        )
+        for inner, reason in archive_failed.items():
+            outer = (f"/{top}" if inner == "/" else f"/{top}{inner}") if top else inner
+            failed[outer] = reason
     # `restore --pattern` never creates a selected directory that has no entries below it
     # (found against proxmox-backup-client 4.2.8 in a local test, 2026-10-08) -- it is still part of
     # the selection, so it goes into the ZIP as the empty directory it is.

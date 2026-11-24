@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from resurgam_worker.pbs_client._subprocess import LONG_COMMAND_TIMEOUT_SECONDS, Guard, materialized_keyfile
@@ -13,6 +15,7 @@ from resurgam_worker.pbs_client.errors import (
     InvalidPathError,
     PbsBinaryNotFoundError,
     PbsCommandFailedError,
+    PbsOutputParseError,
     SelectionTooLargeError,
 )
 from resurgam_worker.pbs_client.models import CatalogEntry, CatalogEntryType
@@ -35,6 +38,93 @@ _RESTORE_TIMEOUT_SECONDS = 300
 # the path in the sample captured — treated the same as a directory
 # entry (no size/mtime) until a real symlink line is actually seen.
 _CATALOG_LINE = re.compile(r'^([dfl])\s+"(.+?)"(?:\s+(\d+)\s+(\S+))?\s*$')
+
+# A CT/host snapshot holds one or more pxar archives, each as
+# `<name>.pxar.didx` or -- with PVE's change-detection mode "metadata" -- as a
+# split pair `<name>.mpxar.didx` + `<name>.ppxar.didx`. `catalog dump` prefixes
+# every line with `./<archive file>/`; for split archives (no catalog file)
+# it falls back to the `.mpxar.didx` metadata archives (proxmox-backup-client
+# `catalog.rs`, `dump_catalog`). `restore` accepts `<name>.pxar` for both
+# forms: `get_pxar_archive_names` (pbs-client `tools/mod.rs`) maps a `.pxar`
+# name missing from the manifest to its `.mpxar`/`.ppxar` pair. Checked in
+# the vendor source 2026-11-24.
+_ARCHIVE_SUFFIXES = (".pxar.didx", ".mpxar.didx")
+
+
+def _restore_name(archive_file: str) -> str | None:
+    """`root.pxar.didx` / `root.mpxar.didx` -> `root.pxar` (what `restore`
+    takes); None for anything that is not a pxar data or metadata archive."""
+    for suffix in _ARCHIVE_SUFFIXES:
+        if archive_file.endswith(suffix) and len(archive_file) > len(suffix):
+            return archive_file[: -len(suffix)] + ".pxar"
+    return None
+
+
+@dataclass(frozen=True)
+class CatalogDump:
+    """`entries`: browse paths -- with a single archive (the normal case, a
+    CT's `root.pxar`) the archive's own root is `/`; with several, each
+    archive is a top-level directory named after its file
+    (`/root.pxar.didx/etc/hosts`, `/etc.pxar.didx/fstab`), the same way VM
+    disk archives appear. `archives`: that top-level name (the archive file,
+    e.g. `root.pxar.didx`) -> the name `restore` takes (`root.pxar`), in
+    catalog order. Map a browse path back with `archive_for_path`."""
+
+    entries: list[CatalogEntry]
+    archives: dict[str, str] = field(default_factory=dict)
+
+
+def archive_for_path(archives: dict[str, str], path: str) -> tuple[str, str]:
+    """(archive name for `restore`, path inside that archive) for a browse
+    path from `CatalogDump.entries`. `archives` is `CatalogDump.archives` or
+    `list_pxar_archives()` -- both name archives the same way."""
+    path = _normalize_archive_path(path) if path != "/" else "/"
+    if not archives:
+        raise InvalidPathError(path, "the snapshot has no pxar archive")
+    if len(archives) == 1:
+        return next(iter(archives.values())), path
+    top, _, rest = path.lstrip("/").partition("/")
+    if top not in archives:
+        raise InvalidPathError(path, "path is not inside one of the snapshot's archives")
+    return archives[top], "/" + rest
+
+
+def list_pxar_archives(
+    repository: str,
+    snapshot: str,
+    *,
+    namespace: str = "",
+    token: str | None = None,
+    keyfile: str | None = None,
+    fingerprint: str | None = None,
+    binary: str = _DEFAULT_BINARY,
+) -> dict[str, str]:
+    """The snapshot's pxar archives, named like `CatalogDump.archives`, from
+    `proxmox-backup-client snapshot files` (metadata only, no catalog) --
+    for a single-file download, which needs the archive name but not the
+    whole tree. The `.ppxar.didx` payload half of a split archive is not
+    listed separately: its `.mpxar.didx` names it."""
+    binary_path = _resolve_binary(binary)
+    command = [binary_path, "snapshot", "files", snapshot, "--repository", repository, "--output-format", "json"]
+    if namespace:
+        command += ["--ns", namespace]
+    with materialized_keyfile(keyfile) as keyfile_path:
+        if keyfile_path is not None:
+            command += ["--keyfile", keyfile_path]
+        result = _run(command, token=token, fingerprint=fingerprint)
+    if result.returncode != 0:
+        raise PbsCommandFailedError(command, result.returncode, result.stderr)
+    try:
+        names = [str(entry["filename"]) for entry in json.loads(result.stdout) if isinstance(entry, dict)]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise PbsOutputParseError(command, result.stdout, exc) from exc
+    archives: dict[str, str] = {}
+    for name in sorted(names):
+        restore = _restore_name(name)
+        if restore is not None:
+            archives[name] = restore
+    return archives
+
 
 _ENTRY_TYPE_BY_CHAR = {
     "d": CatalogEntryType.DIRECTORY,
@@ -107,15 +197,38 @@ def dump_catalog(
     versions can also use for CT/host content, but that binary isn't
     available in every environment — see the capability report).
 
-    Returns entries with paths already stripped of the `./<archive
-    name>.pxar.didx` prefix `catalog dump` includes on every line, so a
-    caller sees clean root-relative paths (`/etc/hosts`, not
-    `./root.pxar.didx/etc/hosts`) — the archive's own root entry becomes
-    `/`.
+    Returns browse paths, not the raw `./<archive file>/...` lines: with
+    one archive (any name, not only `root.pxar`) a caller sees clean
+    root-relative paths (`/etc/hosts`) and the archive's own root becomes
+    `/`; with several, each archive is a top-level directory -- see
+    `CatalogDump`. Use `dump_catalog_with_archives` when the archive
+    names are needed too (restoring, indexing).
 
     `keyfile` -- see `map.map_snapshot`'s docstring. Confirmed live
     (2026-09-26) that `catalog dump --help` lists `--keyfile` directly.
     """
+    return dump_catalog_with_archives(
+        repository,
+        snapshot,
+        namespace=namespace,
+        token=token,
+        keyfile=keyfile,
+        fingerprint=fingerprint,
+        binary=binary,
+    ).entries
+
+
+def dump_catalog_with_archives(
+    repository: str,
+    snapshot: str,
+    *,
+    namespace: str = "",
+    token: str | None = None,
+    keyfile: str | None = None,
+    fingerprint: str | None = None,
+    binary: str = _DEFAULT_BINARY,
+) -> CatalogDump:
+    """`dump_catalog`, plus which archive each top-level path belongs to."""
     binary_path = _resolve_binary(binary)
     command = [binary_path, "catalog", "dump", snapshot, "--repository", repository]
     if namespace:
@@ -127,32 +240,36 @@ def dump_catalog(
         result = _run(command, token=token, fingerprint=fingerprint)
     if result.returncode != 0:
         raise PbsCommandFailedError(command, result.returncode, result.stderr)
+    return parse_catalog_dump(result.stdout + result.stderr)
 
-    entries: list[CatalogEntry] = []
-    archive_prefix: str | None = None
-    # Confirmed live (2026-09-15): `catalog dump` writes the actual
-    # listing to stderr, not stdout — it goes through the client's
-    # logging framework rather than being treated as command output.
-    # stdout is empty on a successful run. Reading both (in this order)
-    # keeps this working regardless of which stream a given client
-    # version chooses; non-matching lines are already skipped below.
-    for line in (result.stdout + result.stderr).splitlines():
+
+def parse_catalog_dump(output: str) -> CatalogDump:
+    """Parses `catalog dump` output (see `dump_catalog`). Confirmed live
+    (2026-09-15): the listing goes to stderr, not stdout -- callers pass
+    both, non-matching lines are skipped."""
+    archives: dict[str, str] = {}
+    raw: list[tuple[str, str, CatalogEntry]] = []
+    for line in output.splitlines():
         parsed = _parse_catalog_line(line)
         if parsed is None:
             continue
         raw_path, entry = parsed
-
-        # The first line is always the archive's own root (e.g.
-        # `./root.pxar.didx`) — every subsequent path is prefixed with it.
-        if archive_prefix is None:
-            archive_prefix = raw_path.removeprefix("./")
-            entries.append(entry.model_copy(update={"path": "/"}))
+        top, _, rest = raw_path.removeprefix("./").partition("/")
+        restore = _restore_name(top)
+        if restore is None:
             continue
+        archives.setdefault(top, restore)
+        raw.append((top, "/" + rest if rest else "", entry))
 
-        relative = raw_path.removeprefix("./").removeprefix(archive_prefix)
-        entries.append(entry.model_copy(update={"path": relative or "/"}))
-
-    return entries
+    entries: list[CatalogEntry] = []
+    if len(archives) <= 1:
+        for _top, rest, entry in raw:
+            entries.append(entry.model_copy(update={"path": rest or "/"}))
+    else:
+        entries.append(CatalogEntry(path="/", type=CatalogEntryType.DIRECTORY, size=None, mtime=None))
+        for top, rest, entry in raw:
+            entries.append(entry.model_copy(update={"path": f"/{top}{rest}"}))
+    return CatalogDump(entries=entries, archives=archives)
 
 
 def list_directory(entries: list[CatalogEntry], directory: str) -> list[CatalogEntry]:

@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from resurgam_worker.pbs_client import catalog as pbs_catalog
 
 from resurgam_api.connectivity.models import DatastoreListResult, RemoteDatastore
 
@@ -19,6 +20,19 @@ from resurgam_api.connectivity.models import DatastoreListResult, RemoteDatastor
 def test_settings(test_settings, tmp_path):
     """Download content is written to files now -- into this test's own directory."""
     return test_settings.model_copy(update={"file_restore_output_dir": str(tmp_path / "file-restore")})
+
+
+@pytest.fixture(autouse=True)
+def _single_root_pxar_archive(monkeypatch):
+    """Most tests here fake `dump_catalog` for a CT (one `root.pxar`); the
+    worker asks `dump_catalog_with_archives` / `list_pxar_archives`."""
+    archives = {"root.pxar.didx": "root.pxar"}
+    monkeypatch.setattr(
+        pbs_catalog,
+        "dump_catalog_with_archives",
+        lambda *a, **kw: pbs_catalog.CatalogDump(entries=pbs_catalog.dump_catalog(*a, **kw), archives=archives),
+    )
+    monkeypatch.setattr(pbs_catalog, "list_pxar_archives", lambda *a, **kw: archives)
 
 
 def _fake_ct_extract(content: bytes):
@@ -1119,3 +1133,85 @@ def test_hung_lane_is_detected_past_budget_and_grace(test_settings):
         _time.monotonic() - test_settings.file_restore_extract_timeout_seconds - RUN_DEADLINE_GRACE_SECONDS - 1
     )
     assert _hung_lane(test_settings, [lane]) is lane
+
+
+def test_run_job_download_from_a_host_backup_uses_its_own_archive(
+    client, platform_admin_headers, db_session, test_settings, monkeypatch
+):
+    """A host backup's archive is not always `root.pxar`
+    (`proxmox-backup-client backup data.pxar:/srv`); with several archives
+    each is a top-level directory of the browse paths."""
+    from resurgam_api.filerestore import browse
+    from resurgam_api.worker.file_restore_worker import _run_job
+
+    group_id, snapshot_id = _setup_group(
+        client, platform_admin_headers, db_session, monkeypatch, backup_type="host", backup_id="srv1"
+    )
+    calls = []
+
+    def fake_extract(repository, snapshot, archive_name, path, out_path, **kw):
+        calls.append((archive_name, path))
+        Path(out_path).write_bytes(b"hello")
+
+    monkeypatch.setattr(browse.catalog, "extract_file_to_path", fake_extract)
+
+    monkeypatch.setattr(browse.catalog, "list_pxar_archives", lambda *a, **kw: {"data.pxar.didx": "data.pxar"})
+    job = _make_job(db_session, group_id, snapshot_id, job_type="download", status="running", path="/docs/a.txt")
+    _run_job(db_session, test_settings, job)
+    db_session.refresh(job)
+    assert job.status == "completed", job.error_message
+
+    monkeypatch.setattr(
+        browse.catalog,
+        "list_pxar_archives",
+        lambda *a, **kw: {"data.pxar.didx": "data.pxar", "etc.pxar.didx": "etc.pxar"},
+    )
+    job = _make_job(
+        db_session, group_id, snapshot_id, job_type="download", status="running", path="/etc.pxar.didx/fstab"
+    )
+    _run_job(db_session, test_settings, job)
+    db_session.refresh(job)
+    assert job.status == "completed", job.error_message
+    assert calls == [("data.pxar", "/docs/a.txt"), ("etc.pxar", "/fstab")]
+
+
+def test_run_job_archive_restores_each_selected_archive_separately(
+    client, platform_admin_headers, db_session, test_settings, monkeypatch
+):
+    from resurgam_api.filerestore import browse, storage
+    from resurgam_api.worker.file_restore_worker import _run_job
+
+    group_id, snapshot_id = _setup_group(
+        client, platform_admin_headers, db_session, monkeypatch, backup_type="host", backup_id="srv1"
+    )
+    listing = (
+        'd "./data.pxar.didx"\nd "./data.pxar.didx/docs"\nf "./data.pxar.didx/docs/a.txt" 1 2026-01-01T00:00:00Z\n'
+        'd "./etc.pxar.didx"\nf "./etc.pxar.didx/fstab" 2 2026-01-01T00:00:00Z\n'
+    )
+    monkeypatch.setattr(
+        browse.catalog, "dump_catalog_with_archives", lambda *a, **kw: pbs_catalog.parse_catalog_dump(listing)
+    )
+    calls = []
+
+    def fake_restore_selection(repository, snapshot, archive_name, target_dir, paths, **kw):
+        calls.append((archive_name, Path(target_dir).name, paths))
+        for path in paths:
+            local = Path(target_dir) / path.lstrip("/")
+            local.parent.mkdir(parents=True, exist_ok=True)
+            local.write_text(archive_name)
+        return {}
+
+    monkeypatch.setattr(browse.catalog, "restore_selection", fake_restore_selection)
+    job = _make_archive_job(
+        db_session, group_id, snapshot_id, ["/data.pxar.didx/docs/a.txt", "/etc.pxar.didx/fstab"], "/"
+    )
+    _run_job(db_session, test_settings, job)
+    db_session.refresh(job)
+    assert job.status == "completed", job.error_message
+    assert calls == [
+        ("data.pxar", "data.pxar.didx", ["/docs/a.txt"]),
+        ("etc.pxar", "etc.pxar.didx", ["/fstab"]),
+    ]
+    contents = _zip_contents(storage.output_dir(test_settings) / job.result_storage_name)
+    assert contents["data.pxar.didx/docs/a.txt"] == b"data.pxar"
+    assert contents["etc.pxar.didx/fstab"] == b"etc.pxar"

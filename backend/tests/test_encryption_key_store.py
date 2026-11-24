@@ -11,6 +11,7 @@ import pytest
 from starlette.requests import Request
 
 from resurgam_api import encryption_keys
+from resurgam_api.auth import step_up
 from resurgam_api.auth.models import AuthenticatedUser
 from resurgam_api.auth.step_up import require_step_up
 from resurgam_api.errors import ResurgamApiError
@@ -170,6 +171,40 @@ def test_local_user_confirms_with_own_password(client, platform_admin_headers):
     assert client.post(url, json=BREAKGLASS, headers=_session(admin)).status_code == 403
     ok = client.post(url, json={"confirmation": {"password": "correct horse battery staple"}}, headers=_session(admin))
     assert ok.status_code == 200
+
+
+def test_wrong_confirmations_are_audited_and_lock_after_five(client, platform_admin_headers, db_session, monkeypatch):
+    admin = _user(client, platform_admin_headers, "pa@example.com", [("platform_admin", "global", None)])
+    other = _user(client, platform_admin_headers, "pb@example.com", [("platform_admin", "global", None)])
+    key = _upload(client, platform_admin_headers, FP_A)
+    url = f"/api/v1/encryption-keys/{key['id']}/download"
+    wrong = {"confirmation": {"password": "not my password"}}
+    right = {"confirmation": {"password": "correct horse battery staple"}}
+
+    for left in (4, 3, 2, 1):
+        response = client.post(url, json=wrong, headers=_session(admin))
+        assert (response.status_code, response.json()["code"]) == (403, "confirmation_failed")
+        assert response.json()["details"]["attempts_left"] == left
+    fifth = client.post(url, json=wrong, headers=_session(admin))
+    assert (fifth.status_code, fifth.json()["code"]) == (429, "confirmation_locked")
+    assert 0 < fifth.json()["details"]["retry_after_seconds"] <= 15 * 60
+
+    # Locked means locked: the right password does not get through either,
+    # and the guesses never reach the key.
+    locked = client.post(url, json=right, headers=_session(admin))
+    assert (locked.status_code, locked.json()["code"]) == (429, "confirmation_locked")
+    failures = db_session.query(AuditEvent).filter_by(action="step_up_confirmation_failed").all()
+    assert len(failures) == 5
+    assert {f.detail["path"] for f in failures} == {url}
+    assert db_session.query(AuditEvent).filter_by(action="encryption_key_downloaded").count() == 0
+
+    # Another account is not affected.
+    assert client.post(url, json=right, headers=_session(other)).status_code == 200
+
+    # Once the window has passed, the account can confirm again (the audit
+    # log is append-only, so shrink the window instead of ageing the rows).
+    monkeypatch.setattr(step_up, "FAILURE_WINDOW_SECONDS", 0)
+    assert client.post(url, json=right, headers=_session(admin)).status_code == 200
 
 
 def test_key_sheet_is_a_pdf(client, platform_admin_headers, db_session):

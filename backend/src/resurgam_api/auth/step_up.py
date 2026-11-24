@@ -11,30 +11,44 @@ session:
   older than `RECENT_LOGIN_SECONDS` -- the identity provider did the proof.
 
 Never satisfiable with an API token: `get_session_user` refuses those first.
+
+Wrong passwords and codes are audited (`step_up_confirmation_failed`) and
+limited: after `MAX_FAILURES` within `FAILURE_WINDOW_SECONDS` the account
+cannot confirm anything until the window has passed (429
+`confirmation_locked`). Counted from the audit log, so the limit holds across
+API processes and restarts. Without it, a stolen session could guess the
+password here as often as it liked.
 """
 
 from __future__ import annotations
 
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import Request
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from resurgam_api.auth.audit import record_login_audit_event
 from resurgam_api.auth.breakglass import verify_credentials
 from resurgam_api.auth.local import verify_password
 from resurgam_api.auth.mfa import verify_totp_code
 from resurgam_api.auth.models import AuthenticatedUser
 from resurgam_api.config import Settings
 from resurgam_api.errors import ResurgamApiError
+from resurgam_api.models.audit import AuditEvent
 from resurgam_api.models.identity import User
 from resurgam_api.models.mfa import TotpCredential
 from resurgam_api.models.secrets import SecretReference
 from resurgam_api.secrets.local_provider import LocalEncryptedSecretsProvider
 
 RECENT_LOGIN_SECONDS = 10 * 60
+MAX_FAILURES = 5
+FAILURE_WINDOW_SECONDS = 15 * 60
+FAILED_ACTION = "step_up_confirmation_failed"
 
 
 class StepUpConfirmation(BaseModel):
@@ -75,6 +89,38 @@ def _confirmed_totp_secret(db: Session, settings: Settings, user_id: uuid.UUID) 
     return LocalEncryptedSecretsProvider(db, settings.secrets_local_encryption_key).retrieve(secret_ref.reference_key)
 
 
+def _recent_failures(db: Session, user_id: uuid.UUID) -> tuple[int, datetime | None]:
+    """Failed confirmations of this account inside the window, and the oldest
+    one's time (the lock ends `FAILURE_WINDOW_SECONDS` after it)."""
+    since = datetime.now(UTC) - timedelta(seconds=FAILURE_WINDOW_SECONDS)
+    count, oldest = (
+        db.query(func.count(AuditEvent.id), func.min(AuditEvent.occurred_at))
+        .filter(
+            AuditEvent.action == FAILED_ACTION,
+            AuditEvent.actor_user_id == user_id,
+            AuditEvent.occurred_at >= since,
+        )
+        .one()
+    )
+    return int(count), oldest
+
+
+def _locked_error(oldest: datetime | None) -> ResurgamApiError:
+    retry_after = FAILURE_WINDOW_SECONDS
+    if oldest is not None:
+        if oldest.tzinfo is None:
+            oldest = oldest.replace(tzinfo=UTC)
+        elapsed = (datetime.now(UTC) - oldest).total_seconds()
+        retry_after = max(1, int(FAILURE_WINDOW_SECONDS - elapsed))
+    minutes = max(1, -(-retry_after // 60))
+    return ResurgamApiError(
+        code="confirmation_locked",
+        message=f"Too many wrong passwords or codes. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+        status_code=429,
+        details={"retry_after_seconds": retry_after},
+    )
+
+
 def require_step_up(
     db: Session,
     settings: Settings,
@@ -83,11 +129,19 @@ def require_step_up(
     confirmation: StepUpConfirmation | None,
 ) -> str:
     """Raises 403 `confirmation_required` / `confirmation_failed` unless the
-    caller just proved who they are. Returns how ("password", "totp",
-    "recent_login") for the audit log."""
+    caller just proved who they are, or 429 `confirmation_locked` after too
+    many wrong attempts (see the module docstring). Returns how ("password",
+    "totp", "recent_login") for the audit log. A wrong password or code is
+    committed to the audit log before the error is raised."""
     confirmation = confirmation or StepUpConfirmation()
     record = db.get(User, user.user_id)
     totp_secret = _confirmed_totp_secret(db, settings, user.user_id)
+
+    attempted = bool(confirmation.password or confirmation.totp_code)
+    if attempted:
+        failures, oldest = _recent_failures(db, user.user_id)
+        if failures >= MAX_FAILURES:
+            raise _locked_error(oldest)
 
     if user.is_breakglass:
         if confirmation.password and verify_credentials(settings, settings.breakglass_username, confirmation.password):
@@ -122,8 +176,22 @@ def require_step_up(
             status_code=403,
             details={"method": "password_or_totp" if totp_secret else "password"},
         )
+    record_login_audit_event(
+        db,
+        action=FAILED_ACTION,
+        actor_user_id=user.user_id,
+        correlation_id=getattr(request.state, "correlation_id", None),
+        detail={"method": "password" if confirmation.password else "totp", "path": request.url.path},
+    )
+    db.commit()
+    failures, oldest = _recent_failures(db, user.user_id)
+    if failures >= MAX_FAILURES:
+        raise _locked_error(oldest)
+    left = MAX_FAILURES - failures
     raise ResurgamApiError(
         code="confirmation_failed",
-        message="That password or code is not correct.",
+        message=f"That password or code is not correct. {left} attempt{'s' if left != 1 else ''} left "
+        f"before confirmations are blocked for {FAILURE_WINDOW_SECONDS // 60} minutes.",
         status_code=403,
+        details={"attempts_left": left},
     )
