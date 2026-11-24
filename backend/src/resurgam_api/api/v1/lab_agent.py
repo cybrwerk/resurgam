@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -6,6 +7,7 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
+from resurgam_api import encryption_keys
 from resurgam_api.api.v1.restore_test_plans import _cluster_trust_and_token
 from resurgam_api.auth.dependency import extract_bearer_token
 from resurgam_api.auth.scope import effective_group_customer_id
@@ -44,7 +46,6 @@ from resurgam_api.models.restore_test import (
     RestoreTestPlanMemberStatus,
     RestoreTestPlanStatus,
 )
-from resurgam_api.models.secrets import SecretReference
 from resurgam_api.restore_test.execution import (
     DEFAULT_POOL_NAME,
     aggregate_run_status,
@@ -61,13 +62,14 @@ from resurgam_api.schemas.lab_agent import (
     LabAgentStatusUpdate,
 )
 from resurgam_api.schemas.restore_test import ApplianceSnippetJobOut
-from resurgam_api.secrets.local_provider import LocalEncryptedSecretsProvider
 from resurgam_api.worker.file_index_worker import (
     _compile_exclude_patterns,
     _insert_entries,
     _is_excluded,
     _link_unchanged_rows,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/lab-agent", tags=["recovery-lab"])
 
@@ -146,20 +148,22 @@ def _member_or_404(
     return member
 
 
-def _resolve_encryption_keyfile(db: Session, settings: Settings, datastore: Datastore) -> str | None:
-    """PBS's own client-side backup encryption (docs/adr/0022): `None`
-    when the datastore has no key configured (the common case today --
-    most backups aren't encrypted), otherwise the key's raw plaintext
-    content, resolved in-process from the credential store exactly like
-    any other secret this backend already reads server-side. Deliberately
-    pushed into the job payload rather than left to the agent's own local
-    config -- see `LabAgentJobOut.encryption_keyfile`'s docstring for why.
-    """
-    if datastore.encryption_key_secret_ref_id is None:
+def _resolve_encryption_keyfile(db: Session, settings: Settings, snapshot: BackupSnapshot | None) -> str | None:
+    """The key this job's backup was encrypted with (ADR 0031): exactly the one
+    its fingerprint names, or None for an unencrypted backup. Pushed into the
+    job payload rather than the agent's own config -- see
+    `LabAgentJobOut.encryption_keyfile`. A key RESURGAM does not hold yields
+    None here so one job cannot break the agent's whole job list; the job then
+    fails with PBS's own "missing key ... <fingerprint>" message. Creating
+    Instant Recovery, Disk Mounts and lab runs already refuses that case with
+    a clear error (`encryption_keys.require_key_for_snapshot`)."""
+    if snapshot is None:
         return None
-    secret_ref = db.get(SecretReference, datastore.encryption_key_secret_ref_id)
-    provider = LocalEncryptedSecretsProvider(db, settings.secrets_local_encryption_key)
-    return provider.retrieve(secret_ref.reference_key)
+    try:
+        return encryption_keys.keyfile_for_snapshot(db, settings, snapshot)
+    except encryption_keys.EncryptionKeyMissingError as exc:
+        logger.warning("lab-agent job: %s", exc)
+        return None
 
 
 @router.get("/jobs", response_model=list[LabAgentJobOut])
@@ -215,7 +219,7 @@ def list_lab_agent_jobs(
                 target_storage=member.target_storage,
                 vnet_name=plan.vnet_name,
                 pool=DEFAULT_POOL_NAME,
-                encryption_keyfile=_resolve_encryption_keyfile(db, settings, datastore),
+                encryption_keyfile=_resolve_encryption_keyfile(db, settings, snapshot),
             )
         )
     return jobs
@@ -510,7 +514,6 @@ def list_lab_agent_file_index_jobs(
 
         if job.file_index_method == "guest_exec_live":
             live_group = db.get(BackupGroup, job.backup_group_id)
-            live_datastore = db.get(Datastore, live_group.datastore_id) if live_group is not None else None
             jobs.append(
                 LabAgentFileIndexJobOut(
                     id=job.id,
@@ -518,11 +521,8 @@ def list_lab_agent_file_index_jobs(
                     target_vmid=job.guest_exec_target_vmid,
                     target_node=job.guest_exec_target_node,
                     exclude_patterns=live_group.file_index_exclude_patterns if live_group is not None else [],
-                    encryption_keyfile=(
-                        _resolve_encryption_keyfile(db, settings, live_datastore)
-                        if live_datastore is not None
-                        else None
-                    ),
+                    # Live guest exec indexes the running VM, never the backup: no key.
+                    encryption_keyfile=None,
                 )
             )
             continue
@@ -552,7 +552,7 @@ def list_lab_agent_file_index_jobs(
                 snapshot_time=snapshot.snapshot_time,
                 pool=DEFAULT_POOL_NAME,
                 exclude_patterns=group.file_index_exclude_patterns,
-                encryption_keyfile=_resolve_encryption_keyfile(db, settings, datastore),
+                encryption_keyfile=_resolve_encryption_keyfile(db, settings, snapshot),
             )
         )
     return jobs

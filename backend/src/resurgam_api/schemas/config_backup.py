@@ -196,8 +196,9 @@ class DatastoreEntry(BaseModel):
     comment: str | None = Field(default=None, description="Datastore comment as last reported by PBS.")
     encryption_key_set: bool = Field(
         default=False,
-        description="Whether a client-side encryption key was stored for this datastore. The key itself is never "
-        "exported -- if true it must be re-entered after an import.",
+        description="Whether this datastore held client-side encrypted backups (or, before the key store, had a "
+        "key stored). Keys are never part of a configuration backup -- bring them over with an encryption key "
+        "export (Administration -> Encryption keys).",
     )
 
 

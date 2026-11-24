@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
+from resurgam_api import encryption_keys
 from resurgam_api.api.v1._connection_helpers import upstream_error
 from resurgam_api.auth.dependency import extract_bearer_token, get_current_user
 from resurgam_api.auth.models import AuthenticatedUser
@@ -250,6 +251,7 @@ def create_plan_for_group(
                 message=f"Backup group {backup_group.backup_id} has no snapshots to restore.",
                 status_code=400,
             )
+        encryption_keys.ensure_key_for_snapshot(db, snapshot)
         # The first member's vmid is already confirmed free by
         # next_free_vmid() above; every subsequent one (and the
         # appliance, below) must be independently re-checked.

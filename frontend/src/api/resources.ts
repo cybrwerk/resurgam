@@ -2,12 +2,17 @@ import {
   API_BASE_URL,
   apiRequest,
   downloadFile,
+  postDownload,
   putFormData,
   startBrowserDownload,
   uploadFile,
   uploadRawWithProgress,
 } from "./client";
 import type {
+  EncryptionKeyImportOut,
+  EncryptionKeyOut,
+  StepUpConfirmation,
+  TenantKeyDownloadPermissionOut,
   DiskMountCreatedOut,
   DiskMountCreateRequest,
   DiskMountOut,
@@ -664,13 +669,6 @@ export const datastoresApi = {
     ),
   usage: (id: string) => apiRequest<DatastoreUsageOut>(`/datastores/${id}/usage`),
   /** Store (or replace) the PBS encryption keyfile content; write-only, never read back. */
-  setEncryptionKey: (id: string, keyfileContent: string) =>
-    apiRequest<DatastoreOut>(`/datastores/${id}/encryption-key`, {
-      method: "POST",
-      body: { keyfile_content: keyfileContent },
-    }),
-  removeEncryptionKey: (id: string) =>
-    apiRequest<DatastoreOut>(`/datastores/${id}/encryption-key`, { method: "DELETE" }),
 };
 
 export const inventoryApi = {
@@ -1068,4 +1066,35 @@ export const apiTokensApi = {
   /** Every user's tokens -- platform admin only. */
   all: () => apiRequest<ApiTokenOut[]>("/api-tokens"),
   revoke: (id: string) => apiRequest<void>(`/api-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
+/** Encryption key store (ADR 0031, stage 2). */
+export const encryptionKeysApi = {
+  list: () => apiRequest<EncryptionKeyOut[]>("/encryption-keys"),
+  missing: () => apiRequest<string[]>("/encryption-keys/missing"),
+  upload: (body: { keyfile_content: string; label?: string; customer_id?: string | null }) =>
+    apiRequest<EncryptionKeyOut>("/encryption-keys", { method: "POST", body }),
+  update: (id: string, body: { label?: string; customer_id?: string | null; clear_customer?: boolean }) =>
+    apiRequest<EncryptionKeyOut>(`/encryption-keys/${id}`, { method: "PATCH", body }),
+  remove: (id: string, force = false) =>
+    apiRequest<void>(`/encryption-keys/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
+  download: (id: string, confirmation: StepUpConfirmation) =>
+    postDownload(`/encryption-keys/${id}/download`, { confirmation }, "pbs-key.json"),
+  keySheet: (id: string, confirmation: StepUpConfirmation) =>
+    postDownload(`/encryption-keys/${id}/key-sheet`, { confirmation }, "pbs-key-sheet.pdf"),
+  confirmCopy: (id: string) => apiRequest<EncryptionKeyOut>(`/encryption-keys/${id}/confirm-copy`, { method: "POST" }),
+  exportAll: (passphrase: string, confirmation: StepUpConfirmation) =>
+    postDownload("/encryption-keys/export", { passphrase, confirmation }, "resurgam-encryption-keys.json"),
+  importAll: (exportContent: string, passphrase: string) =>
+    apiRequest<EncryptionKeyImportOut>("/encryption-keys/import", {
+      method: "POST",
+      body: { export_content: exportContent, passphrase },
+    }),
+  tenantPermission: (customerId: string) =>
+    apiRequest<TenantKeyDownloadPermissionOut>(`/encryption-keys/tenants/${customerId}/download-permission`),
+  setTenantPermission: (customerId: string, allowed: boolean) =>
+    apiRequest<TenantKeyDownloadPermissionOut>(`/encryption-keys/tenants/${customerId}/download-permission`, {
+      method: "PUT",
+      body: { allowed },
+    }),
 };

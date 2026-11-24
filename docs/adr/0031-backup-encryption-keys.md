@@ -1,7 +1,7 @@
 # 0031 — Backup encryption keys: visibility, a key store by fingerprint, and PVE storage encryption
 
 Status: Accepted (2026-11-23, PR merged by the user). Stage 1 built 2026-11-23 (live-checked against PBS 4.2);
-stage 2 next, stage 3 later. Supersedes the key model of ADR 0022 (one key per datastore).
+stage 2 built 2026-11-24 (see "As built" below); stage 3 later. Supersedes the key model of ADR 0022 (one key per datastore).
 
 ## Context
 
@@ -95,6 +95,32 @@ Three stages. Stages 1 and 2 only read from PBS/PVE; stage 3 writes to PVE.
   can be created through RESURGAM.
 - Key change as a guided action: the old key stays in the store, the alarm from stage 1 explains that
   old and new backups need different keys.
+
+### As built (stage 1 + 2), where it differs from the plan above
+
+- **Password-protected keys are rejected for now** (`password_protected_key`), not stored with their
+  password. PVE and vzdump only make keys without passphrase, so this covers every PVE-made key;
+  the error tells how to convert a copy (`proxmox-backup-client key change-passphrase --kdf none`).
+- **The fingerprint is read from the keyfile's own `fingerprint` field** (as PVE's `PBSPlugin` does),
+  not by running `proxmox-backup-client key show`: the API container has no PBS client.
+- **Key sheet**: one A4 PDF with the fingerprint, the full keyfile as text and as one QR code, and
+  restore steps -- not PBS's `paperkey` output (same idea, no PBS client needed). Restore from it:
+  scan or type it into a file and check it with `proxmox-backup-client key show`.
+- **Fresh confirmation** (`auth/step_up.py`): password, or a TOTP code; break-glass: its password;
+  SSO-only accounts: a sign-in no older than 10 minutes. API tokens never reach it.
+- **Alarms built**: `encryption_key_missing` (one per datastore and missing key, critical),
+  `encryption_key_copy_unconfirmed` (platform admins only), `backup_key_changed` (stage 1).
+  **Not built yet**: the PVE-storage side of stage 1 (which PVE storage has which key configured, and
+  the "PVE storage key ≠ backups" alarm) -- it moves to stage 3, which touches PVE storages anyway.
+- **ADR 0022 keys** are moved into the store by the collector scheduler (every tick, a no-op once
+  done) and detached from the datastore. `POST/DELETE /datastores/{id}/encryption-key` are kept as
+  deprecated: POST adds the key to the store, DELETE only removes a not-yet-moved datastore key.
+- **Configuration backups** still never contain keys; a datastore with encrypted backups is marked so
+  the import asks for the key export.
+- **Which RESURGAM paths use the per-backup key**: file browse/download/ZIP, file indexing
+  (`external_mount`), Disk Mounts, Instant Recovery, Recovery Lab, guided restores. Guest-exec live
+  indexing reads inside the running guest and needs no key. Instant Recovery, Disk Mounts, restore
+  plans and lab plans refuse up front with `encryption_key_missing` (409) when the key is not stored.
 
 ## Not in scope
 

@@ -12,7 +12,11 @@ class AlarmOut(BaseModel):
             "`instant_recovery_overlay_storage` (the overlay storage of a VM running from its backup is >= 80 % full), "
             "`instant_recovery_failed` (a failed Instant Recovery left its VM or backup mapping behind), "
             "`backup_key_changed` (a backup group's newest backup uses a different encryption key, or none, than "
-            "the backup before it -- older and newer backups need different keys to restore)."
+            "the backup before it -- older and newer backups need different keys to restore), "
+            "`encryption_key_missing` (backups in a datastore are encrypted with a key RESURGAM does not have -- "
+            "they cannot be indexed, browsed or restored here), "
+            "`encryption_key_copy_unconfirmed` (no one confirmed yet that a copy of a stored key is kept outside "
+            "RESURGAM; platform admins only)."
         )
     )
     severity: str = Field(description="`critical` or `warning`.")
@@ -20,5 +24,5 @@ class AlarmOut(BaseModel):
     customer_name: str | None = Field(default=None, description="Display name of `customer_id`.")
     customer_match_code: str | None = Field(default=None, description="Three-letter short code of `customer_id`.")
     message: str = Field(description="Human-readable description, ready to show.")
-    entity_type: str = Field(description="`backup_group`, `datastore` or `restore_plan`.")
+    entity_type: str = Field(description="`backup_group`, `datastore`, `restore_plan` or `encryption_key`.")
     entity_id: UUID = Field(description="ID of the affected entity (of `entity_type`).")

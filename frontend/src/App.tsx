@@ -10,6 +10,7 @@ import { BillingPage } from "./pages/BillingPage";
 import { CapacityTrendsPage } from "./pages/CapacityTrendsPage";
 import { CredentialsPage } from "./pages/CredentialsPage";
 import { CustomerPanelPage } from "./pages/CustomerPanelPage";
+import { EncryptionKeysPage } from "./pages/EncryptionKeysPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { DatastoresPage } from "./pages/DatastoresPage";
 import { DiskMountsPage } from "./pages/DiskMountsPage";
@@ -58,6 +59,7 @@ const PAGE_BY_PATH: Record<string, ReactNode> = {
   "/administration/users-roles": <UsersPage />,
   "/administration/system-jobs": <SystemJobsPage />,
   "/administration/credentials": <CredentialsPage />,
+  "/administration/encryption-keys": <EncryptionKeysPage />,
   "/administration/integrations": <IntegrationsPage />,
   "/administration/system-settings": <SystemSettingsPage />,
   "/administration/audit-log": <AuditLogPage />,

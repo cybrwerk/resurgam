@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from resurgam_api.api.v1._connection_helpers import stored_token_id
+from resurgam_api.api.v1.datastores import datastore_encryption
 from resurgam_api.config import Settings
 from resurgam_api.inventory.file_index_defaults import default_file_index_exclude_patterns
 from resurgam_api.models.application_group import ApplicationGroup, ApplicationGroupMember
@@ -263,7 +264,10 @@ def _pbs_instances(db: Session, settings: Settings, lookup: _Lookup) -> list[Pbs
                         name=d.name,
                         path=d.path,
                         comment=d.comment,
-                        encryption_key_set=d.encryption_key_secret_ref_id is not None,
+                        # ADR 0031: keys live in the key store now; "set" means this
+                        # datastore holds encrypted backups whose key RESURGAM had.
+                        encryption_key_set=d.encryption_key_secret_ref_id is not None
+                        or bool(datastore_encryption(db, d.id)["key_fingerprints_in_use"]),
                     )
                     for d in sorted(datastores_by_instance.get(instance.id, []), key=lambda d: d.name)
                 ],

@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
+from resurgam_api import encryption_keys
 from resurgam_api.auth.dependency import get_current_user, require_role
 from resurgam_api.auth.models import AuthenticatedUser
 from resurgam_api.auth.scope import visible_customer_ids
@@ -11,9 +12,10 @@ from resurgam_api.db import get_db
 from resurgam_api.errors import ResurgamApiError
 from resurgam_api.models.audit import AuditEvent
 from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
+from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.identity import RoleKey
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
-from resurgam_api.models.secrets import SecretPurpose, SecretReference
+from resurgam_api.models.secrets import SecretReference
 from resurgam_api.models.tenancy import Customer
 from resurgam_api.schemas.datastore import AssignCustomerRequest, DatastoreOut, SetDatastoreEncryptionKeyRequest
 from resurgam_api.secrets.local_provider import LocalEncryptedSecretsProvider
@@ -69,8 +71,10 @@ def datastore_encryption(db: Session, datastore_id: uuid.UUID) -> dict:
             BackupSnapshot.key_fingerprint.isnot(None),
         )
     )
+    in_use = sorted({row[0] for row in current.distinct().all()})
     return {
-        "key_fingerprints_in_use": sorted({row[0] for row in current.distinct().all()}),
+        "key_fingerprints_in_use": in_use,
+        "keys_missing": encryption_keys.fingerprints_without_key(db, in_use),
         "encrypted_snapshot_count": current.count(),
     }
 
@@ -180,7 +184,7 @@ def delete_datastore(
     db.commit()
 
 
-@router.post("/{datastore_id}/encryption-key", response_model=DatastoreOut)
+@router.post("/{datastore_id}/encryption-key", response_model=DatastoreOut, deprecated=True)
 def set_datastore_encryption_key(
     datastore_id: uuid.UUID,
     body: SetDatastoreEncryptionKeyRequest,
@@ -189,46 +193,53 @@ def set_datastore_encryption_key(
     settings: Settings = Depends(get_settings),
     user=Depends(_require_platform_admin),
 ) -> DatastoreOut:
-    """PBS's own client-side backup encryption (docs/adr/0022) means an
-    encrypted backup is unreadable to RESURGAM's own direct
-    `proxmox-backup-client`/`proxmox-file-restore` calls (Recovery Lab,
-    `guest_exec_ephemeral`, `external_mount` indexing, file-browsing)
-    without the exact keyfile PBS used to encrypt it -- PBS itself never
-    stores that key in a recoverable form. Create-or-rotate: mirrors
-    `pbs_instances.create_pbs_instance`'s secret-store shape exactly, one
-    `SecretReference`/`LocalSecretValue` pair per datastore, replaced in
-    place on a second call rather than accumulating orphaned rows.
-    """
+    """Deprecated (ADR 0031): use POST `/encryption-keys`. Kept so existing
+    scripts keep working: the keyfile goes into the key store (by its
+    fingerprint, assigned to this datastore's tenant), not onto the datastore --
+    RESURGAM picks the key per backup, so one datastore can hold backups with
+    different keys and unencrypted ones. Uploading a key that is already stored
+    is accepted and changes nothing."""
     datastore = db.get(Datastore, datastore_id)
     if datastore is None:
         raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
-
-    provider = LocalEncryptedSecretsProvider(db, settings.secrets_local_encryption_key)
-
-    if datastore.encryption_key_secret_ref_id is not None:
-        secret_ref = db.get(SecretReference, datastore.encryption_key_secret_ref_id)
-        provider.store(secret_ref.reference_key, body.keyfile_content)
-    else:
-        reference_key = f"datastore-encryption-key-{uuid.uuid4()}"
-        secret_ref = SecretReference(
-            reference_key=reference_key,
-            description=f"PBS encryption keyfile for datastore '{datastore.name}'",
-            purpose=SecretPurpose.PBS_ENCRYPTION_KEY,
+    try:
+        parsed = encryption_keys.parse_keyfile(body.keyfile_content)
+    except encryption_keys.KeyfileError as exc:
+        raise ResurgamApiError(code=exc.code, message=exc.message, status_code=400) from exc
+    if db.query(EncryptionKey.id).filter_by(fingerprint=parsed.fingerprint).first() is None:
+        assignment = get_datastore_assignment(db, datastore.id)
+        key = encryption_keys.store_key(
+            db,
+            settings,
+            body.keyfile_content,
+            label=f"Datastore {datastore.name}",
+            customer_id=assignment.customer_id if assignment else None,
+            user_id=user.user_id,
         )
-        db.add(secret_ref)
-        db.flush()
-        provider.store(reference_key, body.keyfile_content)
-        datastore.encryption_key_secret_ref_id = secret_ref.id
-
+        db.add(
+            AuditEvent(
+                actor_user_id=user.user_id,
+                action="encryption_key_uploaded",
+                target_type="encryption_key",
+                target_id=str(key.id),
+                correlation_id=getattr(request.state, "correlation_id", None),
+                detail={"fingerprint": key.fingerprint, "via_datastore": str(datastore.id)},
+            )
+        )
     _record_audit(
-        db, request, actor_user_id=user.user_id, action="datastore_encryption_key_set", target_id=datastore_id
+        db,
+        request,
+        actor_user_id=user.user_id,
+        action="datastore_encryption_key_set",
+        target_id=datastore_id,
+        detail={"fingerprint": parsed.fingerprint},
     )
     db.commit()
     db.refresh(datastore)
     return to_out(db, datastore)
 
 
-@router.delete("/{datastore_id}/encryption-key", response_model=DatastoreOut)
+@router.delete("/{datastore_id}/encryption-key", response_model=DatastoreOut, deprecated=True)
 def delete_datastore_encryption_key(
     datastore_id: uuid.UUID,
     request: Request,
@@ -236,12 +247,19 @@ def delete_datastore_encryption_key(
     settings: Settings = Depends(get_settings),
     user=Depends(_require_platform_admin),
 ) -> DatastoreOut:
+    """Deprecated (ADR 0031): removes a key still attached to this datastore from
+    before the key store (the collector moves those into the store by itself).
+    400 `no_encryption_key` otherwise -- delete stored keys with DELETE
+    `/encryption-keys/{id}`."""
     datastore = db.get(Datastore, datastore_id)
     if datastore is None:
         raise ResurgamApiError(code="not_found", message="Datastore not found.", status_code=404)
     if datastore.encryption_key_secret_ref_id is None:
         raise ResurgamApiError(
-            code="no_encryption_key", message="This datastore has no encryption key configured.", status_code=400
+            code="no_encryption_key",
+            message="This datastore has no key of its own. Keys are managed under Administration -> Encryption keys "
+            "(DELETE /encryption-keys/{id}).",
+            status_code=400,
         )
 
     secret_ref = db.get(SecretReference, datastore.encryption_key_secret_ref_id)

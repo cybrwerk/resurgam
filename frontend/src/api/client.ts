@@ -118,6 +118,24 @@ export async function downloadFile(path: string, filename: string): Promise<void
   downloadBlob(await response.blob(), filename);
 }
 
+/** POSTs a JSON body and saves the file the server answers with -- for
+ * downloads that need a request body, such as an encryption key download
+ * with its fresh confirmation (ADR 0031). The file name comes from the
+ * server's `Content-Disposition`, `fallbackName` otherwise. Errors are thrown
+ * as `ApiError`, like `apiRequest`. */
+export async function postDownload(path: string, body: unknown, fallbackName: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  if (response.status === 401) unauthorizedHandler?.();
+  await _throwIfNotOk(response);
+
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  downloadBlob(await response.blob(), match ? match[1] : fallbackName);
+}
+
 /** Lets the browser itself download `path` (relative to the API base) by navigating to it -- the
  * response streams straight to disk, unlike `downloadFile`, which buffers the whole body as a Blob
  * in the page first (fine for a CSV, not for a multi-GB ZIP). There is no Authorization header on

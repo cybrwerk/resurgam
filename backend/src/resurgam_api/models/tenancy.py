@@ -26,3 +26,6 @@ class Customer(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     # to do with file indexing and must be settable for every customer,
     # including ones who have never opted into file indexing at all.
     report_retention_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # ADR 0031: tenant admins may download the encryption keys assigned to this
+    # tenant only when a platform admin allowed it. Off by default.
+    allow_tenant_key_download: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

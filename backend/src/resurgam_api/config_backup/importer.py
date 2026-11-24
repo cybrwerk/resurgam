@@ -39,6 +39,7 @@ from resurgam_api.models.branding_settings import BrandingSettings
 from resurgam_api.models.customer_file_index_settings import CustomerFileIndexSettings
 from resurgam_api.models.customer_notification_settings import CustomerNotificationSettings
 from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
+from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.identity import Role, ScopeType, User, UserRoleAssignment
 from resurgam_api.models.instance_settings import InstanceSettings
 from resurgam_api.models.inventory import BackupGroup, ProtectionPolicy
@@ -553,15 +554,20 @@ def _import_pbs_instances(ctx: _Ctx, doc: ConfigBackupDocument) -> None:
                 ctx.record(
                     "datastores", ds_key, "update" if changed else "skip", _changed_reason(changed) if changed else None
                 )
-            if ds.encryption_key_set and datastore.encryption_key_secret_ref_id is None:
+            if (
+                ds.encryption_key_set
+                and datastore.encryption_key_secret_ref_id is None
+                and ctx.db.query(EncryptionKey.id).first() is None
+            ):
                 ctx.reenter.append(
                     ReEnterItem(
                         kind="datastore_encryption_key",
                         target=ds_key,
                         target_id=ctx.target_id(datastore),
                         page=_PAGES["datastores"],
-                        detail="This datastore used a PBS client-side encryption key. Upload the key again "
-                        "(Datastores) -- without it, file restores from encrypted backups fail.",
+                        detail="This datastore holds encrypted backups. Import your encryption key export (or "
+                        "upload the keys) under Administration -> Encryption keys -- without them, indexing and "
+                        "file restores from encrypted backups fail.",
                     )
                 )
         ctx.db.flush()

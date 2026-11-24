@@ -5,6 +5,7 @@ from resurgam_api.models.billing import PricingPlan
 from resurgam_api.models.customer_file_index_settings import CustomerFileIndexSettings
 from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
 from resurgam_api.models.disk_mount import DiskMount, DiskMountStatus
+from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.file_index_entry import FileIndexEntry
 from resurgam_api.models.file_index_job import FileIndexJob
 from resurgam_api.models.filerestore_job import FileRestoreJob
@@ -53,6 +54,7 @@ __all__ = [
     "DatastoreRole",
     "DiskMount",
     "DiskMountStatus",
+    "EncryptionKey",
     "FileIndexEntry",
     "FileIndexJob",
     "FileRestoreJob",

@@ -11,6 +11,17 @@ the signed update bundle, where the appliance's Updates page shows it before you
   datastore lists the keys its backups use. New alarm when a workload's newest backup uses a different
   key, or none, than the one before it -- older and newer backups then need different keys to restore.
   Filled in by the next inventory sync.
+- **Encryption key store** (ADR 0031, stage 2), Administration → Encryption keys: any number of PBS
+  encryption keys, stored by fingerprint. RESURGAM now uses exactly the key a backup was made with,
+  and no key for unencrypted backups -- before, one key per datastore broke every unencrypted backup
+  in that datastore. Keys can be downloaded as keyfile or as a printable key sheet (PDF with QR code),
+  and all keys exported to one passphrase-encrypted file and imported into another RESURGAM. Each
+  download or export needs your password or authenticator code, is written to the audit log and
+  announced to the platform admins by mail. Tenant admins see their tenant's keys on the tenant panel
+  and may download them only if a platform admin allows it for that tenant. New alarms: backups
+  whose key RESURGAM does not have; keys without a confirmed copy outside RESURGAM. Keys uploaded per
+  datastore before are moved into the store automatically. Starting an Instant Recovery, Disk Mount
+  or lab run on a backup whose key is missing now says so up front.
 - **Wrong address**: opened under any name or IP other than `RESURGAM_DOMAIN`, the appliance now says
   which address to use instead of showing an empty page (API: `421 unknown_host`).
 - **Ephemeral file indexing** is marked experimental. It waits for the temporary copy to finish

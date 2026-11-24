@@ -54,8 +54,9 @@ Older versions may work but are not tested. Please report what you run in your b
 - **Guest-exec file indexing** (indexing through the QEMU guest agent) is not recommended as the
   primary indexing method. It can fail on some Windows guests, and the root cause is not yet
   isolated. Use the default indexing method where possible.
-- **Encrypted PBS backups:** RESURGAM can use a datastore encryption key you upload, but this has
-  not been verified against a real encrypted backup yet, and RESURGAM cannot generate keys itself.
+- **Encrypted PBS backups:** upload your keys under Administration → Encryption keys. RESURGAM uses
+  the right key per backup and shows which backups are encrypted. Not yet: keys protected with a
+  passphrase, and setting up encryption on a PVE storage from RESURGAM (generate the key in PVE).
 - **Restore Center** checks the target, but does not create missing PVE storage definitions for
   you. If the PBS datastore isn't configured as storage on the target PVE node, it tells you what
   to add.

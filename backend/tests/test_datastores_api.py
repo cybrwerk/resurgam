@@ -267,72 +267,46 @@ def test_unassigned_datastore_invisible_to_non_admin(
     assert get_response.status_code == 404
 
 
-# --- PBS encryption key (docs/adr/0022) -----------------------------------------
+# --- PBS encryption key (docs/adr/0022, moved to the key store by ADR 0031) ----
+
+KEYFILE = (
+    '{"kdf": null, "created": "2026-11-22T10:00:00+01:00", "modified": "2026-11-22T10:00:00+01:00", '
+    '"data": "AAAA", "fingerprint": "' + ":".join(["ab"] * 32) + '"}'
+)
 
 
-def test_set_encryption_key_marks_configured_but_never_returns_content(client, platform_admin_headers, monkeypatch):
-    instance_id = _create_pbs_instance(client, platform_admin_headers)
-    datastore_id = _import_one(client, platform_admin_headers, instance_id, monkeypatch)
-
-    get_before = client.get(f"/api/v1/datastores/{datastore_id}", headers=platform_admin_headers)
-    assert get_before.json()["encryption_key_configured"] is False
-
-    set_response = client.post(
-        f"/api/v1/datastores/{datastore_id}/encryption-key",
-        json={"keyfile_content": '{"kdf":"scrypt","data":"fake-key-material"}'},
-        headers=platform_admin_headers,
-    )
-    assert set_response.status_code == 200
-    body = set_response.json()
-    assert body["encryption_key_configured"] is True
-    assert "keyfile_content" not in body
-    assert "encryption_key_secret_ref_id" not in body
-
-
-def test_set_encryption_key_on_second_call_rotates_in_place(client, platform_admin_headers, monkeypatch, db_session):
-    from resurgam_api.models.datastore import Datastore
-    from resurgam_api.models.secrets import SecretReference
-
-    instance_id = _create_pbs_instance(client, platform_admin_headers)
-    datastore_id = _import_one(client, platform_admin_headers, instance_id, monkeypatch)
-
-    client.post(
-        f"/api/v1/datastores/{datastore_id}/encryption-key",
-        json={"keyfile_content": "first-key"},
-        headers=platform_admin_headers,
-    )
-    first_ref_id = db_session.get(Datastore, datastore_id).encryption_key_secret_ref_id
-
-    client.post(
-        f"/api/v1/datastores/{datastore_id}/encryption-key",
-        json={"keyfile_content": "second-key"},
-        headers=platform_admin_headers,
-    )
-    db_session.expire_all()
-    second_ref_id = db_session.get(Datastore, datastore_id).encryption_key_secret_ref_id
-
-    # Rotated in place, not a second orphaned SecretReference row.
-    assert first_ref_id == second_ref_id
-    assert db_session.query(SecretReference).filter_by(purpose="pbs_encryption_key").count() == 1
-
-
-def test_delete_encryption_key_clears_reference_and_removes_secret(
+def test_deprecated_datastore_key_upload_goes_into_the_key_store(
     client, platform_admin_headers, monkeypatch, db_session
 ):
-    from resurgam_api.models.secrets import SecretReference
+    from resurgam_api.models.encryption_key import EncryptionKey
 
     instance_id = _create_pbs_instance(client, platform_admin_headers)
     datastore_id = _import_one(client, platform_admin_headers, instance_id, monkeypatch)
-    client.post(
+
+    for _ in range(2):  # a second upload of the same key changes nothing
+        response = client.post(
+            f"/api/v1/datastores/{datastore_id}/encryption-key",
+            json={"keyfile_content": KEYFILE},
+            headers=platform_admin_headers,
+        )
+        assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["encryption_key_configured"] is False  # nothing on the datastore itself any more
+    assert "keyfile_content" not in body
+    keys = db_session.query(EncryptionKey).all()
+    assert [k.fingerprint for k in keys] == [":".join(["ab"] * 32)]
+
+
+def test_deprecated_datastore_key_upload_rejects_password_protected_key(client, platform_admin_headers, monkeypatch):
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_one(client, platform_admin_headers, instance_id, monkeypatch)
+    response = client.post(
         f"/api/v1/datastores/{datastore_id}/encryption-key",
-        json={"keyfile_content": "some-key"},
+        json={"keyfile_content": KEYFILE.replace('"kdf": null', '"kdf": {"Scrypt": {"n": 65536}}')},
         headers=platform_admin_headers,
     )
-
-    delete_response = client.delete(f"/api/v1/datastores/{datastore_id}/encryption-key", headers=platform_admin_headers)
-    assert delete_response.status_code == 200
-    assert delete_response.json()["encryption_key_configured"] is False
-    assert db_session.query(SecretReference).filter_by(purpose="pbs_encryption_key").count() == 0
+    assert response.status_code == 400
+    assert response.json()["code"] == "password_protected_key"
 
 
 def test_delete_encryption_key_when_none_configured_rejected(client, platform_admin_headers, monkeypatch):
@@ -354,7 +328,7 @@ def test_set_encryption_key_requires_platform_admin(
 
     response = client.post(
         f"/api/v1/datastores/{datastore_id}/encryption-key",
-        json={"keyfile_content": "some-key"},
+        json={"keyfile_content": KEYFILE},
         headers=viewer_headers,
     )
     assert response.status_code == 403
@@ -363,7 +337,7 @@ def test_set_encryption_key_requires_platform_admin(
 def test_set_encryption_key_nonexistent_datastore_404(client, platform_admin_headers):
     response = client.post(
         "/api/v1/datastores/00000000-0000-0000-0000-000000000000/encryption-key",
-        json={"keyfile_content": "some-key"},
+        json={"keyfile_content": KEYFILE},
         headers=platform_admin_headers,
     )
     assert response.status_code == 404

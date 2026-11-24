@@ -1109,6 +1109,8 @@ export interface DatastoreOut {
   removed_from_pbs_at?: string | null;
   /** Encryption key fingerprints used by current backups in this datastore (ADR 0031). */
   key_fingerprints_in_use?: string[];
+  /** Fingerprints from key_fingerprints_in_use that are not in the key store. */
+  keys_missing?: string[];
   /** How many current backups in this datastore are client-side encrypted. */
   encrypted_snapshot_count?: number;
 }
@@ -2376,4 +2378,36 @@ export interface ApiTokenGrantableOut {
   can_grant_any: boolean;
   options: ApiTokenGrant[];
   max_lifetime_days: number;
+}
+
+/** A PBS encryption key in RESURGAM's key store (ADR 0031). Never carries key material. */
+export interface EncryptionKeyOut {
+  id: string;
+  fingerprint: string;
+  label: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  kdf: string;
+  source: "upload" | "import" | "datastore" | string;
+  key_created_at: string | null;
+  created_at: string;
+  copy_confirmed_at: string | null;
+  backup_count: number;
+  can_download: boolean;
+}
+
+/** Fresh proof of identity for a key download/export: password or authenticator code. */
+export interface StepUpConfirmation {
+  password?: string | null;
+  totp_code?: string | null;
+}
+
+export interface EncryptionKeyImportOut {
+  imported: string[];
+  skipped: string[];
+}
+
+export interface TenantKeyDownloadPermissionOut {
+  customer_id: string;
+  allowed: boolean;
 }
