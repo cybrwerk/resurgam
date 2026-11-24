@@ -4,7 +4,10 @@ Release notes for RESURGAM appliance releases. One `## <version>` section per re
 first -- `appliance/release/build-bundle.sh` copies the section for the version in `VERSION` into
 the signed update bundle, where the appliance's Updates page shows it before you apply it.
 
-## Unreleased
+## 0.3.1
+
+Encryption keys, safer sign-in and fixes on top of the first public beta. Update from 0.3.0 in
+System Settings -> Updates (upload the bundle, or let the update source find it on GitHub).
 
 - **Backup encryption is visible** (ADR 0031, stage 1): every backup shows whether it is client-side
   encrypted and with which key (fingerprint), the workload list shows it for the newest backup, and a

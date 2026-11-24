@@ -1,3 +1,9 @@
+resurgam-worker (0.3.1-1) unstable; urgency=medium
+
+  * Release 0.3.1 (see CHANGELOG.md in the repository root).
+
+ -- RESURGAM <noreply@resurgam.invalid>  Tue, 24 Nov 2026 17:50:00 +0100
+
 resurgam-worker (0.3.0-1) unstable; urgency=medium
 
   * Release 0.3.0, the first public beta (see CHANGELOG.md in the repository root).
