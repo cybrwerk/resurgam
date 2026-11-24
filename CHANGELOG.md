@@ -4,6 +4,16 @@ Release notes for RESURGAM appliance releases. One `## <version>` section per re
 first -- `appliance/release/build-bundle.sh` copies the section for the version in `VERSION` into
 the signed update bundle, where the appliance's Updates page shows it before you apply it.
 
+## Unreleased
+
+- **Zabbix monitoring**: a ready-made Zabbix 7.0 template, "RESURGAM by HTTP" -- API availability,
+  usage of every datastore (warning at 80 %, high at 90 %, and when RESURGAM stops measuring), and
+  status and age of the newest backup, verify, prune, garbage collection and sync task per PBS. New page
+  Administration → Zabbix monitoring: a wizard that creates the read-only API token, downloads the
+  template with this appliance's address filled in, and lists every value to enter in Zabbix. Manual
+  section "Zabbix monitoring". API: `GET /zabbix/setup`, `/zabbix/template`, `/zabbix/ca-certificate`;
+  `/zabbix/datastores/usage` now also returns `age_seconds`.
+
 ## 0.3.1
 
 Encryption keys, safer sign-in and fixes on top of the first public beta. Update from 0.3.0 in

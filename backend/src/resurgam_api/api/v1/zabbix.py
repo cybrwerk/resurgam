@@ -14,11 +14,15 @@ Session tokens would expire after 15 minutes.
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from resurgam_api import monitoring
 from resurgam_api.auth.dependency import require_role
+from resurgam_api.config import Settings, get_settings
 from resurgam_api.db import get_db
+from resurgam_api.errors import ResurgamApiError
+from resurgam_api.lab_setup.pairing import read_ca_certificate
 from resurgam_api.models.datastore import Datastore
 from resurgam_api.models.identity import RoleKey
 from resurgam_api.models.inventory import TaskRun
@@ -33,10 +37,106 @@ from resurgam_api.schemas.zabbix import (
     ZabbixJobDiscoveryOut,
     ZabbixJobStatusOut,
     ZabbixJobStatusValue,
+    ZabbixSetupOut,
 )
 
 router = APIRouter(prefix="/zabbix", tags=["zabbix"])
 _require_platform_admin = require_role(RoleKey.PLATFORM_ADMIN)
+
+# Tasks PBS reports that RESURGAM cannot classify; the template's discovery
+# filter ({$RESURGAM.JOB.TYPE.NOT_MATCHES}) leaves them out by default.
+_UNMONITORED_TASK_TYPE = "unknown"
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _appliance_url(settings: Settings) -> str:
+    return settings.frontend_origin.rstrip("/")
+
+
+@router.get("/setup", response_model=ZabbixSetupOut)
+def zabbix_setup(
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    _user=Depends(_require_platform_admin),
+) -> ZabbixSetupOut:
+    """For the Zabbix monitoring wizard (Administration -> Zabbix monitoring):
+    the address Zabbix has to use, the template, and how much Zabbix will
+    discover right now."""
+    datastore_ids = [row[0] for row in db.query(Datastore.id).all()]
+    with_usage = (
+        db.query(UsageMeasurement.datastore_id)
+        .filter(UsageMeasurement.datastore_id.in_(datastore_ids))
+        .distinct()
+        .count()
+        if datastore_ids
+        else 0
+    )
+    instances = {row[0] for row in db.query(PbsInstance.id).all()}
+    job_types = [
+        pair for pair in _distinct_task_type_pairs(db) if pair[0] in instances and pair[1] != _UNMONITORED_TASK_TYPE
+    ]
+    return ZabbixSetupOut(
+        appliance_url=_appliance_url(settings),
+        template_name=monitoring.TEMPLATE_NAME,
+        template_version=monitoring.TEMPLATE_REVISION,
+        min_zabbix_version=monitoring.MIN_ZABBIX_VERSION,
+        ca_certificate_available=read_ca_certificate(settings.appliance_tls_ca_file) is not None,
+        datastores=len(datastore_ids),
+        datastores_with_usage=with_usage,
+        job_types=len(job_types),
+    )
+
+
+@router.get(
+    "/template",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/yaml": {}},
+            "description": "The Zabbix 7.0 template (YAML) with {$RESURGAM.URL} preset to this appliance's address.",
+        }
+    },
+)
+def zabbix_template(settings: Settings = Depends(get_settings), _user=Depends(_require_platform_admin)) -> Response:
+    """The "RESURGAM by HTTP" template to import in Zabbix (Data collection
+    -> Templates -> Import). Its {$RESURGAM.URL} macro already holds this
+    appliance's address; only {$RESURGAM.TOKEN} is left to set on the host."""
+    return Response(
+        content=monitoring.render_template(_appliance_url(settings)),
+        media_type="application/yaml",
+        headers={"Content-Disposition": f'attachment; filename="{monitoring.TEMPLATE_FILENAME}"'},
+    )
+
+
+@router.get(
+    "/ca-certificate",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/x-pem-file": {}}, "description": "The appliance's root CA certificate (PEM)."},
+        404: {"description": "`ca_certificate_unavailable`: the appliance uses a certificate from a public CA."},
+    },
+)
+def zabbix_ca_certificate(
+    settings: Settings = Depends(get_settings), _user=Depends(_require_platform_admin)
+) -> Response:
+    """The root certificate of the appliance's own CA (Caddy `tls internal`).
+    Only needed to switch on TLS verification in Zabbix: add it to the Zabbix
+    server's CA store, then set "SSL verify peer" on the template's HTTP items."""
+    pem = read_ca_certificate(settings.appliance_tls_ca_file)
+    if pem is None:
+        raise ResurgamApiError(
+            code="ca_certificate_unavailable",
+            message="This appliance has no own CA certificate to download -- its certificate comes from a public CA.",
+            status_code=404,
+        )
+    return Response(
+        content=pem,
+        media_type="application/x-pem-file",
+        headers={"Content-Disposition": 'attachment; filename="resurgam-appliance-ca.crt"'},
+    )
 
 
 @router.get("/discovery/datastores", response_model=ZabbixDatastoreDiscoveryOut)
@@ -95,6 +195,7 @@ def zabbix_datastore_usage(
                 total_bytes=latest.total_bytes,
                 usage_percent=round(usage_percent, 2),
                 captured_at=latest.captured_at,
+                age_seconds=max(0.0, (datetime.now(UTC) - _aware(latest.captured_at)).total_seconds()),
             )
         )
     return ZabbixDatastoreUsageOut(datastores=values)

@@ -17,6 +17,7 @@ import { DiskMountsPage } from "./pages/DiskMountsPage";
 import { FileWorkspacePage } from "./pages/FileWorkspacePage";
 import { RestoreCenterPage } from "./pages/RestoreCenterPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { ZabbixMonitoringPage } from "./pages/ZabbixMonitoringPage";
 import { JobsBackupPage } from "./pages/JobsBackupPage";
 import { JobsPruneGcPage } from "./pages/JobsPruneGcPage";
 import { JobsReplicationSyncPage } from "./pages/JobsReplicationSyncPage";
@@ -61,6 +62,7 @@ const PAGE_BY_PATH: Record<string, ReactNode> = {
   "/administration/credentials": <CredentialsPage />,
   "/administration/encryption-keys": <EncryptionKeysPage />,
   "/administration/integrations": <IntegrationsPage />,
+  "/administration/zabbix": <ZabbixMonitoringPage />,
   "/administration/system-settings": <SystemSettingsPage />,
   "/administration/audit-log": <AuditLogPage />,
   "/reporting/capacity-trends": <CapacityTrendsPage />,
