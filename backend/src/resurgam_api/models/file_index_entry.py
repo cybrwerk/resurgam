@@ -73,7 +73,7 @@ class FileIndexEntry(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
         UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True
     )
 
-    # e.g. "root.pxar" (CT/host, always this one archive) or
+    # e.g. "root.pxar" (a CT; a host backup can have other or several pxar archives) or
     # "drive-scsi0.img.fidx" (VM, one per disk).
     archive: Mapped[str] = mapped_column(String(255), nullable=False)
     path: Mapped[str] = mapped_column(String(4096), nullable=False)

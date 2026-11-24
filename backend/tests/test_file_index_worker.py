@@ -6,9 +6,26 @@ conventions (monkeypatch at the `browse.catalog`/`browse.file_restore`
 call sites).
 """
 
+import uuid
 from datetime import UTC, datetime, time, timedelta
 
+import pytest
+from resurgam_worker.pbs_client import catalog as pbs_catalog
+
 from resurgam_api.connectivity.models import DatastoreListResult, RemoteDatastore
+
+
+@pytest.fixture(autouse=True)
+def _dump_with_archives_follows_dump_catalog(monkeypatch):
+    """The worker calls `dump_catalog_with_archives`; these tests fake
+    `dump_catalog` (a CT's single `root.pxar`), so route one to the other."""
+    monkeypatch.setattr(
+        pbs_catalog,
+        "dump_catalog_with_archives",
+        lambda *a, **kw: pbs_catalog.CatalogDump(
+            entries=pbs_catalog.dump_catalog(*a, **kw), archives={"root.pxar.didx": "root.pxar"}
+        ),
+    )
 
 
 def _create_pbs_instance(client, headers) -> str:
@@ -319,6 +336,7 @@ def test_run_index_job_ct_host_resume_does_not_duplicate_entries(
 
     pre_existing = catalog_entries_to_rows(
         [CatalogEntry(path="/etc", type=CatalogEntryType.DIRECTORY)],
+        {"root.pxar.didx": "root.pxar"},
         file_index_job_id=job.id,
         backup_snapshot_id=snapshot_id,
         backup_group_id=group_id,
@@ -1456,3 +1474,20 @@ def test_enqueue_due_scheduled_work_does_not_requeue_yesterdays_already_indexed_
     _enqueue_due_scheduled_work(db_session)
 
     assert db_session.query(FileIndexJob).filter_by(trigger="scheduled").count() == 0
+
+
+def test_index_rows_name_the_archive_each_entry_belongs_to():
+    from resurgam_api.filerestore.index_entries import catalog_entries_to_rows
+
+    dump = pbs_catalog.parse_catalog_dump(
+        'd "./data.pxar.didx"\nf "./data.pxar.didx/a.txt" 1 2026-01-01T00:00:00Z\n'
+        'd "./etc.pxar.didx"\nf "./etc.pxar.didx/fstab" 2 2026-01-01T00:00:00Z\n'
+    )
+    ids = {"file_index_job_id": uuid.uuid4(), "backup_snapshot_id": uuid.uuid4(), "backup_group_id": uuid.uuid4()}
+    rows = catalog_entries_to_rows(dump.entries, dump.archives, customer_id=None, **ids)
+    assert [(r["archive"], r["path"]) for r in rows] == [
+        ("data.pxar", "/data.pxar.didx"),
+        ("data.pxar", "/data.pxar.didx/a.txt"),
+        ("etc.pxar", "/etc.pxar.didx"),
+        ("etc.pxar", "/etc.pxar.didx/fstab"),
+    ]

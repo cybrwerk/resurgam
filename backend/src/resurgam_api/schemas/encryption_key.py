@@ -54,7 +54,10 @@ class EncryptionKeyDownloadRequest(BaseModel):
     confirmation: StepUpConfirmation = Field(
         default_factory=StepUpConfirmation,
         description="Fresh proof that you are signed in yourself: password, or an authenticator code. SSO-only "
-        "accounts need a sign-in no older than 10 minutes and can send an empty object.",
+        "accounts need a sign-in no older than 10 minutes and can send an empty object. Wrong answers are "
+        "audited and answer 403 `confirmation_failed` with `attempts_left`; after 5 within 15 minutes the "
+        "account cannot confirm anything until the window has passed (429 `confirmation_locked`, "
+        "`retry_after_seconds`).",
     )
 
 

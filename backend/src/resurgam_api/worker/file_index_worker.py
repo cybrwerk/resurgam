@@ -544,7 +544,7 @@ def _run_ct_host_index_job(
     """
     repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore, snapshot)
     snapshot_id = snapshot_identifier(group, snapshot)
-    entries = catalog.dump_catalog(
+    dump = catalog.dump_catalog_with_archives(
         repository,
         snapshot_id,
         namespace=group.namespace,
@@ -552,11 +552,13 @@ def _run_ct_host_index_job(
         keyfile=keyfile,
         fingerprint=pbs_fingerprint(db, datastore),
     )
+    entries = dump.entries
     if group.file_index_exclude_patterns:
         compiled = _compile_exclude_patterns(group.file_index_exclude_patterns)
         entries = [e for e in entries if not _is_excluded(e.path, compiled)]
     rows = catalog_entries_to_rows(
         entries,
+        dump.archives,
         file_index_job_id=job.id,
         backup_snapshot_id=snapshot.id,
         backup_group_id=group.id,

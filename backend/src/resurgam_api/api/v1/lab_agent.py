@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lab-agent", tags=["recovery-lab"])
 
 # The one fixed "archive" name for every guest-exec entry (ADR 0021) --
-# unlike external_mount's per-disk archive names (CT_HOST_ARCHIVE_NAME /
+# unlike external_mount's per-disk archive names (the pxar archive name /
 # a derived drive/disk segment), guest-exec walks the whole guest
 # filesystem in one pass from inside the guest itself, so there's no
 # separate archive concept to preserve.
