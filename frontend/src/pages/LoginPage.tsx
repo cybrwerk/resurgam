@@ -11,6 +11,7 @@ import { MfaEnrollmentStep } from "../components/MfaEnrollmentStep";
 import { SetupWizard } from "../components/SetupWizard";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
+import { lockedMessage } from "../lib/loginErrors";
 import { getWebauthnAssertion, isWebauthnSupported } from "../lib/webauthn";
 import styles from "./LoginPage.module.css";
 
@@ -48,7 +49,7 @@ function MfaStep({ challenge, onDone }: { challenge: MfaChallenge; onDone: (toke
           : await authApi.verifyRecoveryCode(challenge.challengeToken, code);
       onDone(response.access_token);
     } catch (err) {
-      setError(err instanceof ApiError && err.code === "invalid_code" ? t("auth.mfaInvalidCode") : t("common.loadError"));
+      setError(lockedMessage(err, t) ?? (err instanceof ApiError && err.code === "invalid_code" ? t("auth.mfaInvalidCode") : t("common.loadError")));
     } finally {
       setSubmitting(false);
     }
@@ -169,7 +170,7 @@ export function LoginPage() {
         await loginWithToken(response.access_token);
       }
     } catch (err) {
-      setLocalError(err instanceof ApiError && err.code === "invalid_credentials" ? t("auth.invalidCredentials") : t("common.loadError"));
+      setLocalError(lockedMessage(err, t) ?? (err instanceof ApiError && err.code === "invalid_credentials" ? t("auth.invalidCredentials") : t("common.loadError")));
     } finally {
       setLocalSubmitting(false);
     }
@@ -183,7 +184,10 @@ export function LoginPage() {
       const response = await authApi.breakglassLogin(username, password);
       await loginWithToken(response.access_token);
     } catch (err) {
-      if (err instanceof ApiError && err.code === "breakglass_disabled") {
+      const locked = lockedMessage(err, t);
+      if (locked) {
+        setBreakglassError(locked);
+      } else if (err instanceof ApiError && err.code === "breakglass_disabled") {
         setBreakglassError(t("auth.breakglassDisabled"));
       } else if (err instanceof ApiError && err.code === "invalid_credentials") {
         setBreakglassError(t("auth.invalidCredentials"));

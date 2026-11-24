@@ -26,6 +26,11 @@ the signed update bundle, where the appliance's Updates page shows it before you
   a key download, key sheet or export is written to the audit log (`step_up_confirmation_failed`);
   after 5 within 15 minutes that account cannot confirm anything until the 15 minutes have passed
   (API: `429 confirmation_locked`).
+- **Sign-in resists password guessing**: 5 wrong passwords or codes within 15 minutes lock that
+  sign-in for the rest of the 15 minutes, even for the right password -- local sign-in (per email
+  address), break-glass, authenticator and recovery codes, and changing the password. A successful
+  sign-in starts the count again; the sign-in page says how long to wait (API: `429 login_locked`).
+  See the manual, "Too many wrong passwords".
 - **Host backups with other archive names**: files from a host backup whose archive is not called
   `root.pxar` (for example `proxmox-backup-client backup data.pxar:/srv`) can now be downloaded,
   zipped and indexed -- before, browsing worked but every download failed. A host backup with several

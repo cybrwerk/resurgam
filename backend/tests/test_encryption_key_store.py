@@ -11,7 +11,7 @@ import pytest
 from starlette.requests import Request
 
 from resurgam_api import encryption_keys
-from resurgam_api.auth import step_up
+from resurgam_api.auth import attempt_limit
 from resurgam_api.auth.models import AuthenticatedUser
 from resurgam_api.auth.step_up import require_step_up
 from resurgam_api.errors import ResurgamApiError
@@ -203,7 +203,7 @@ def test_wrong_confirmations_are_audited_and_lock_after_five(client, platform_ad
 
     # Once the window has passed, the account can confirm again (the audit
     # log is append-only, so shrink the window instead of ageing the rows).
-    monkeypatch.setattr(step_up, "FAILURE_WINDOW_SECONDS", 0)
+    monkeypatch.setattr(attempt_limit, "WINDOW_SECONDS", 0)
     assert client.post(url, json=right, headers=_session(admin)).status_code == 200
 
 
