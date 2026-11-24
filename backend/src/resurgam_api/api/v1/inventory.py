@@ -3,6 +3,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from resurgam_api.api.v1.datastores import get_datastore_assignment, get_datastore_in_scope_or_404
@@ -54,6 +55,36 @@ def _record_audit(db: Session, request: Request, *, actor_user_id, action: str, 
     )
 
 
+def group_encryption(db: Session, group_id: uuid.UUID) -> dict:
+    """Encryption facts for one backup group from its synced snapshots (ADR 0031)."""
+    newest_two = (
+        db.query(BackupSnapshot.crypt_mode, BackupSnapshot.key_fingerprint)
+        .filter(BackupSnapshot.backup_group_id == group_id)
+        .order_by(BackupSnapshot.snapshot_time.desc())
+        .limit(2)
+        .all()
+    )
+    fingerprint_rows = (
+        db.query(BackupSnapshot.key_fingerprint, func.min(BackupSnapshot.snapshot_time))
+        .filter(BackupSnapshot.backup_group_id == group_id, BackupSnapshot.key_fingerprint.isnot(None))
+        .group_by(BackupSnapshot.key_fingerprint)
+        .order_by(func.min(BackupSnapshot.snapshot_time))
+        .all()
+    )
+    latest = newest_two[0] if newest_two else (None, None)
+    key_changed = (
+        len(newest_two) == 2
+        and None not in (newest_two[0][0], newest_two[1][0])
+        and newest_two[0][1] != newest_two[1][1]
+    )
+    return {
+        "latest_crypt_mode": latest[0],
+        "latest_key_fingerprint": latest[1],
+        "key_fingerprints": [row[0] for row in fingerprint_rows],
+        "key_changed": key_changed,
+    }
+
+
 def to_backup_group_out(db: Session, group: BackupGroup) -> BackupGroupOut:
     policy = db.get(ProtectionPolicy, group.protection_policy_id) if group.protection_policy_id else None
     snapshot_count = db.query(BackupSnapshot).filter_by(backup_group_id=group.id).count()
@@ -80,6 +111,7 @@ def to_backup_group_out(db: Session, group: BackupGroup) -> BackupGroupOut:
         last_synced_at=group.last_synced_at,
         superseded_at=group.superseded_at,
         removed_from_pbs_at=group.removed_from_pbs_at,
+        **group_encryption(db, group.id),
     )
 
 

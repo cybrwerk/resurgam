@@ -12,6 +12,7 @@ from resurgam_api.errors import ResurgamApiError
 from resurgam_api.models.audit import AuditEvent
 from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
 from resurgam_api.models.identity import RoleKey
+from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
 from resurgam_api.models.secrets import SecretPurpose, SecretReference
 from resurgam_api.models.tenancy import Customer
 from resurgam_api.schemas.datastore import AssignCustomerRequest, DatastoreOut, SetDatastoreEncryptionKeyRequest
@@ -52,7 +53,26 @@ def to_out(db: Session, datastore: Datastore) -> DatastoreOut:
         role=assignment.role if assignment else None,
         encryption_key_configured=datastore.encryption_key_secret_ref_id is not None,
         removed_from_pbs_at=datastore.removed_from_pbs_at,
+        **datastore_encryption(db, datastore.id),
     )
+
+
+def datastore_encryption(db: Session, datastore_id: uuid.UUID) -> dict:
+    """Key fingerprints in use by the datastore's current backups (ADR 0031)."""
+    current = (
+        db.query(BackupSnapshot.key_fingerprint)
+        .join(BackupGroup, BackupGroup.id == BackupSnapshot.backup_group_id)
+        .filter(
+            BackupGroup.datastore_id == datastore_id,
+            BackupGroup.superseded_at.is_(None),
+            BackupGroup.removed_from_pbs_at.is_(None),
+            BackupSnapshot.key_fingerprint.isnot(None),
+        )
+    )
+    return {
+        "key_fingerprints_in_use": sorted({row[0] for row in current.distinct().all()}),
+        "encrypted_snapshot_count": current.count(),
+    }
 
 
 def get_datastore_in_scope_or_404(db: Session, datastore_id: uuid.UUID, user: AuthenticatedUser) -> Datastore:

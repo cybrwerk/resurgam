@@ -67,6 +67,12 @@ class RemoteSnapshot:
     # even though every backup had a real guest name visible in the PBS
     # web UI: the wrong field was being read.
     comment: str | None = None
+    # Client-side encryption (ADR 0031): PBS reports a `crypt-mode` per file
+    # and, for an encrypted snapshot, the key's `fingerprint` -- confirmed live
+    # on PBS 4.2 (2026-11-22). `crypt_mode` summarizes the data archives:
+    # "none", "encrypt", "sign-only", "mixed", or None when PBS gave nothing.
+    crypt_mode: str | None = None
+    key_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)

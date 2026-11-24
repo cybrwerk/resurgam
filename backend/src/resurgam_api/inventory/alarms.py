@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from resurgam_api.api.v1.datastores import get_datastore_assignment
@@ -44,6 +45,9 @@ class AlarmType(str, Enum):
     INSTANT_RECOVERY_RUNNING_LONG = "instant_recovery_running_long"
     INSTANT_RECOVERY_OVERLAY_STORAGE = "instant_recovery_overlay_storage"
     INSTANT_RECOVERY_FAILED = "instant_recovery_failed"
+    # Backup encryption (ADR 0031): a group's newest backup uses a different key
+    # than the one before it (or switched between encrypted and unencrypted).
+    BACKUP_KEY_CHANGED = "backup_key_changed"
 
 
 class AlarmSeverity(str, Enum):
@@ -192,6 +196,61 @@ def _instant_recovery_alarms(db: Session, visible: set[uuid.UUID] | None, now: d
     return alarms
 
 
+def _short_fp(fingerprint: str | None) -> str:
+    return ":".join(fingerprint.split(":")[:4]) + ":…" if fingerprint else "no key"
+
+
+def _encryption_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut]:
+    """ADR 0031: the newest backup of a group was made with a different key
+    (or without one) than the backup before it -- restoring older and newer
+    backups then needs different keys. Only snapshots whose crypt mode is
+    known (synced since migration 0071) take part."""
+    ranked = (
+        db.query(
+            BackupSnapshot.backup_group_id.label("group_id"),
+            BackupSnapshot.crypt_mode.label("crypt_mode"),
+            BackupSnapshot.key_fingerprint.label("fingerprint"),
+            func.row_number()
+            .over(partition_by=BackupSnapshot.backup_group_id, order_by=BackupSnapshot.snapshot_time.desc())
+            .label("rank"),
+        )
+        .join(BackupGroup, BackupGroup.id == BackupSnapshot.backup_group_id)
+        .filter(BackupGroup.superseded_at.is_(None), BackupGroup.removed_from_pbs_at.is_(None))
+        .subquery()
+    )
+    rows = db.query(ranked).filter(ranked.c.rank <= 2).all()
+    newest: dict[uuid.UUID, dict[int, tuple[str | None, str | None]]] = {}
+    for row in rows:
+        newest.setdefault(row.group_id, {})[row.rank] = (row.crypt_mode, row.fingerprint)
+
+    alarms: list[AlarmOut] = []
+    for group_id, pair in newest.items():
+        if 1 not in pair or 2 not in pair:
+            continue
+        (mode_new, fp_new), (mode_old, fp_old) = pair[1], pair[2]
+        if mode_new is None or mode_old is None or fp_new == fp_old:
+            continue
+        group = db.get(BackupGroup, group_id)
+        customer_id = effective_group_customer_id(group, get_datastore_assignment(db, group.datastore_id))
+        if visible is not None and customer_id not in visible:
+            continue
+        label = group.resolved_name or f"{group.backup_type}/{group.backup_id}"
+        alarms.append(
+            AlarmOut(
+                type=AlarmType.BACKUP_KEY_CHANGED.value,
+                severity=AlarmSeverity.WARNING.value,
+                customer_id=customer_id,
+                message=(
+                    f"{label}: the newest backup uses {_short_fp(fp_new)}, the one before used {_short_fp(fp_old)} "
+                    "-- older and newer backups now need different keys to restore. Keep both keys."
+                ),
+                entity_type="backup_group",
+                entity_id=group.id,
+            )
+        )
+    return alarms
+
+
 def _attach_customer_names(db: Session, alarms: list[AlarmOut]) -> None:
     """Every alarm carries a bare `customer_id` from the two collectors
     above; this resolves each to a display name + the three-letter
@@ -223,6 +282,7 @@ def compute_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut
         _protection_alarms(db, visible)
         + _usage_alarms(db, visible)
         + _instant_recovery_alarms(db, visible, datetime.now(UTC))
+        + _encryption_alarms(db, visible)
     )
     _attach_customer_names(db, alarms)
     return alarms

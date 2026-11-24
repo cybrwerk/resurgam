@@ -353,6 +353,30 @@ def list_namespaces(
     return NamespaceListResult(reachable=True, namespaces=namespaces)
 
 
+# Files whose crypt mode says nothing about the backup's content: the manifest
+# itself is only signed in an encrypted backup ("sign-only"), and the client log
+# is uploaded afterwards without a mode.
+_CRYPT_MODE_IGNORED_FILES = {"index.json.blob", "client.log.blob"}
+
+
+def snapshot_crypt_mode(files: object) -> str | None:
+    """Summarizes a PBS snapshot's per-file `crypt-mode` for its data
+    archives: "none", "encrypt", "sign-only", "mixed" when they differ, or
+    None when PBS reported no mode at all (ADR 0031). Live PBS 4.2 shapes:
+    unencrypted VM backup -> every file "none"; encrypted backup -> data
+    archives "encrypt", `index.json.blob` "sign-only"."""
+    if not isinstance(files, list):
+        return None
+    modes = {
+        f.get("crypt-mode")
+        for f in files
+        if isinstance(f, dict) and f.get("filename") not in _CRYPT_MODE_IGNORED_FILES and f.get("crypt-mode")
+    }
+    if not modes:
+        return None
+    return modes.pop() if len(modes) == 1 else "mixed"
+
+
 def _list_snapshots_in_namespace(
     host: str, port: int, trust: TrustConfig, token: str, datastore: str, namespace: str, timeout: float
 ) -> tuple[list[RemoteSnapshot] | None, str | None]:
@@ -373,6 +397,8 @@ def _list_snapshots_in_namespace(
                 size=entry.get("size"),
                 owner=entry.get("owner"),
                 comment=entry.get("comment"),
+                crypt_mode=snapshot_crypt_mode(entry.get("files")),
+                key_fingerprint=entry.get("fingerprint") or None,
             )
             for entry in data
         ]

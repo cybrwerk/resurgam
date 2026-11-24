@@ -1,6 +1,7 @@
 # 0031 — Backup encryption keys: visibility, a key store by fingerprint, and PVE storage encryption
 
-Status: Proposed (2026-11-22). Supersedes the key model of ADR 0022 (one key per datastore).
+Status: Accepted (2026-11-23, PR merged by the user). Stage 1 built 2026-11-23 (live-checked against PBS 4.2);
+stage 2 next, stage 3 later. Supersedes the key model of ADR 0022 (one key per datastore).
 
 ## Context
 

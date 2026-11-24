@@ -1107,7 +1107,14 @@ export interface DatastoreOut {
   encryption_key_configured?: boolean;
   /** Set by the Collector's automatic discovery when PBS no longer lists this datastore; null while present. */
   removed_from_pbs_at?: string | null;
+  /** Encryption key fingerprints used by current backups in this datastore (ADR 0031). */
+  key_fingerprints_in_use?: string[];
+  /** How many current backups in this datastore are client-side encrypted. */
+  encrypted_snapshot_count?: number;
 }
+
+/** Client-side encryption of a backup as PBS reports it (ADR 0031); null = not known yet. */
+export type CryptMode = "none" | "encrypt" | "sign-only" | "mixed";
 
 export interface BackupGroupOut {
   id: string;
@@ -1134,6 +1141,13 @@ export interface BackupGroupOut {
   superseded_at: string | null;
   /** Set when the Collector's most recent sync no longer found this backup on PBS at all (deleted/pruned, not renamed). History is preserved; cleared automatically if PBS reports it again later. */
   removed_from_pbs_at: string | null;
+  /** Encryption of the group's newest backup (ADR 0031). */
+  latest_crypt_mode?: CryptMode | null;
+  latest_key_fingerprint?: string | null;
+  /** Every key fingerprint any backup of this group used, oldest first. */
+  key_fingerprints?: string[];
+  /** The newest backup uses a different key (or none) than the one before it. */
+  key_changed?: boolean;
 }
 
 export type FileIndexMethod = "external_mount" | "guest_exec_live" | "guest_exec_ephemeral";
@@ -1191,6 +1205,9 @@ export interface BackupSnapshotOut {
   snapshot_time: string;
   verify_status: VerifyStatus;
   size_bytes: number | null;
+  crypt_mode?: CryptMode | null;
+  /** Fingerprint of the key this backup was encrypted with; null if unencrypted. */
+  key_fingerprint?: string | null;
   last_synced_at: string;
 }
 

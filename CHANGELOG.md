@@ -4,6 +4,20 @@ Release notes for RESURGAM appliance releases. One `## <version>` section per re
 first -- `appliance/release/build-bundle.sh` copies the section for the version in `VERSION` into
 the signed update bundle, where the appliance's Updates page shows it before you apply it.
 
+## Unreleased
+
+- **Backup encryption is visible** (ADR 0031, stage 1): every backup shows whether it is client-side
+  encrypted and with which key (fingerprint), the workload list shows it for the newest backup, and a
+  datastore lists the keys its backups use. New alarm when a workload's newest backup uses a different
+  key, or none, than the one before it -- older and newer backups then need different keys to restore.
+  Filled in by the next inventory sync.
+- **Wrong address**: opened under any name or IP other than `RESURGAM_DOMAIN`, the appliance now says
+  which address to use instead of showing an empty page (API: `421 unknown_host`).
+- **Ephemeral file indexing** is marked experimental. It waits for the temporary copy to finish
+  booting and is more patient with its guest agent, but it needs fast PBS storage.
+- Security updates of third-party packages (Pillow, Authlib, PyJWT, brotlicffi, Mako, Vite and
+  others).
+
 ## 0.3.0 — first public beta
 
 The first public beta. Everything from the 0.2.x test releases, run through a full function test

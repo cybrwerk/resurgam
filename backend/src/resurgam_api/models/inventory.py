@@ -215,6 +215,11 @@ class BackupSnapshot(Base, UUIDPrimaryKeyMixin):
     # INT4's ~2.1GB ceiling — confirmed necessary against real PBS usage
     # data (a single datastore's `used` bytes was ~2.18TB).
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Client-side encryption as PBS reports it (ADR 0031): "none", "encrypt",
+    # "sign-only", "mixed", or NULL when unknown (not synced since 0071).
+    crypt_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # The encryption key's fingerprint ("ad:a6:9b:...") for an encrypted snapshot.
+    key_fingerprint: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

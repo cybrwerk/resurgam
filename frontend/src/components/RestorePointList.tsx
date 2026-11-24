@@ -4,6 +4,7 @@ import type { BackupSnapshotOut } from "../api/types";
 import { formatBytes } from "../lib/formatBytes";
 import { verifyStatusPresentation } from "../lib/statusPresentation";
 import { DataTable, type DataTableColumn } from "./DataTable";
+import { EncryptionBadge } from "./EncryptionBadge";
 import { StatusBadge } from "./StatusBadge";
 import styles from "./RestorePointList.module.css";
 
@@ -37,6 +38,12 @@ export function RestorePointList({ snapshots, selectedSnapshotId, onSelect }: Re
         return <StatusBadge tone={tone} label={label} />;
       },
       sortValue: (row) => row.verify_status,
+    },
+    {
+      key: "encryption",
+      header: t("encryption.column"),
+      render: (row) => <EncryptionBadge mode={row.crypt_mode} fingerprint={row.key_fingerprint} />,
+      sortValue: (row) => row.key_fingerprint ?? row.crypt_mode ?? "",
     },
     {
       key: "size",
