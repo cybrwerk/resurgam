@@ -23,19 +23,16 @@ class AssignCustomerRequest(BaseModel):
 
 
 class SetDatastoreEncryptionKeyRequest(BaseModel):
-    """The raw content of a PBS keyfile (as produced by `proxmox-backup-client
-    key create`/`key show`) -- plain JSON text, never parsed or validated by
-    RESURGAM itself, just stored and later handed back to `proxmox-backup-client`
-    as-is via `--keyfile`. See docs/adr/0022-pbs-client-side-encryption.md.
-    """
+    """Deprecated (ADR 0031): the keyfile goes into the key store
+    (`/encryption-keys`) by its fingerprint."""
 
     keyfile_content: str = Field(
         min_length=1,
         description=(
             "Full content (JSON) of the encryption keyfile the backups on this datastore were encrypted with. For "
             "backups made by PVE this is `/etc/pve/priv/storage/<STORAGE-ID>.enc` on a PVE node. Stored encrypted; "
-            "never returned by any API call. Setting a key again replaces the previous one. Password-protected "
-            "keys are not supported (same as in PVE itself)."
+            "never returned by this endpoint. Added to the key store by its fingerprint; uploading another key "
+            "adds it next to the first. Password-protected keys are not supported yet."
         ),
     )
 
@@ -59,9 +56,9 @@ class DatastoreOut(BaseModel):
     encryption_key_configured: bool = Field(
         default=False,
         description=(
-            "Whether a PBS encryption keyfile is stored for this datastore (set with POST, removed with DELETE "
-            "`/datastores/{id}/encryption-key`). RESURGAM needs it to index, browse or restore files from "
-            "client-side encrypted backups. The key itself is never returned."
+            "Deprecated (ADR 0031): whether this datastore still has a key of its own from before the key store. "
+            "The collector moves such keys into the key store, so this becomes false by itself. Use "
+            "`key_fingerprints_in_use` and `keys_missing` instead."
         ),
     )
     key_fingerprints_in_use: list[str] = Field(
@@ -69,6 +66,13 @@ class DatastoreOut(BaseModel):
         description=(
             "Every encryption key fingerprint used by a current backup in this datastore (ADR 0031), sorted. "
             "Empty when no backup is encrypted or the inventory has not been synced since this was added."
+        ),
+    )
+    keys_missing: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Fingerprints from `key_fingerprints_in_use` that are not in the key store (`/encryption-keys`): the "
+            "backups encrypted with them cannot be indexed, browsed or restored by RESURGAM until the key is uploaded."
         ),
     )
     encrypted_snapshot_count: int = Field(

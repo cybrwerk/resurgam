@@ -542,7 +542,7 @@ def _run_ct_host_index_job(
     0.55s against a real PBS 4.2 instance) -- cheap enough that the call
     itself isn't checkpointed, only the batched insert afterward.
     """
-    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore)
+    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore, snapshot)
     snapshot_id = snapshot_identifier(group, snapshot)
     entries = catalog.dump_catalog(
         repository,
@@ -602,7 +602,7 @@ def _run_vm_index_job(
     directory so a pause/budget-checkpoint can resume exactly where it
     left off rather than re-walking from "/".
     """
-    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore)
+    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore, snapshot)
     fingerprint = pbs_fingerprint(db, datastore)
     snapshot_id = snapshot_identifier(group, snapshot)
     compiled_excludes = _compile_exclude_patterns(group.file_index_exclude_patterns)

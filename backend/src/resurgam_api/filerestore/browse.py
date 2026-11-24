@@ -42,6 +42,7 @@ from resurgam_worker.pbs_client.errors import (
 from resurgam_worker.zip_builder import ZipBuilder, ZipReport, ZipWriteError
 from sqlalchemy.orm import Session
 
+from resurgam_api import encryption_keys
 from resurgam_api.config import Settings
 from resurgam_api.filerestore import capability, storage
 from resurgam_api.filerestore.sessions import stop_stale_session_if_needed
@@ -134,7 +135,9 @@ def pbs_fingerprint(db: Session, datastore: Datastore) -> str | None:
     return instance.tls_fingerprint_sha256 or None
 
 
-def repository_token_and_keyfile(db: Session, settings: Settings, datastore: Datastore) -> tuple[str, str, str | None]:
+def repository_token_and_keyfile(
+    db: Session, settings: Settings, datastore: Datastore, snapshot: BackupSnapshot | None = None
+) -> tuple[str, str, str | None]:
     """`<token-id>@<host>:<port>:<datastore>` — the PBS CLI `--repository`
     shape (confirmed live this session), plus the token *secret*
     separately for the `PBS_PASSWORD` env var. The stored secret is the
@@ -143,12 +146,10 @@ def repository_token_and_keyfile(db: Session, settings: Settings, datastore: Dat
     REST header shape) — split here since the CLI wants the two parts in
     different places, not because the stored shape itself is wrong.
 
-    Also resolves the datastore's PBS encryption keyfile (docs/adr/0022),
-    `None` when it has none configured (the common case today) — in-process,
-    the same way the token itself already is, since this runs on the
-    backend host directly rather than needing anything pushed to a remote
-    agent (that push-per-job path is `resurgam-lab-agent`'s own, separate
-    concern, see `api/v1/lab_agent.py::_resolve_encryption_keyfile`).
+    Also resolves the encryption key `snapshot` needs (ADR 0031): exactly the
+    one its fingerprint names, None for an unencrypted backup or when no
+    snapshot is given. Raises `FileRestoreError` (409, `encryption_key_missing`)
+    when the backup is encrypted with a key RESURGAM does not hold.
     """
     instance = db.get(PbsInstance, datastore.pbs_instance_id)
     secret_ref = db.get(SecretReference, instance.api_token_secret_ref_id)
@@ -158,9 +159,11 @@ def repository_token_and_keyfile(db: Session, settings: Settings, datastore: Dat
     repository = f"{token_id}@{instance.host}:{instance.port}:{datastore.name}"
 
     keyfile: str | None = None
-    if datastore.encryption_key_secret_ref_id is not None:
-        key_secret_ref = db.get(SecretReference, datastore.encryption_key_secret_ref_id)
-        keyfile = provider.retrieve(key_secret_ref.reference_key)
+    if snapshot is not None:
+        try:
+            keyfile = encryption_keys.keyfile_for_snapshot(db, settings, snapshot)
+        except encryption_keys.EncryptionKeyMissingError as exc:
+            raise FileRestoreError("encryption_key_missing", str(exc), 409) from exc
 
     return repository, token_secret, keyfile
 
@@ -168,7 +171,7 @@ def repository_token_and_keyfile(db: Session, settings: Settings, datastore: Dat
 def list_directory(
     db: Session, settings: Settings, group: BackupGroup, snapshot: BackupSnapshot, datastore: Datastore, path: str
 ) -> list[FileEntryOut]:
-    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore)
+    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore, snapshot)
     snapshot_id = snapshot_identifier(group, snapshot)
 
     try:
@@ -333,7 +336,7 @@ def download_file(
 ) -> DownloadResult:
     """A single file, streamed to `<output dir>/<job id>.bin` -- never held in memory or stored
     in Postgres (it was until migration 0056). `deadline`/`abort_check`: see `_DiskGuard`."""
-    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore)
+    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore, snapshot)
     snapshot_id = snapshot_identifier(group, snapshot)
     filename = path.rsplit("/", 1)[-1] or "download"
     directory = storage.ensure_output_dir(settings)
@@ -447,7 +450,7 @@ def build_archive(
     before every ZIP member. A failed write to the ZIP itself (disk full) fails the job with
     `archive_write_failed` and deletes the partial file.
     """
-    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore)
+    repository, token, keyfile = repository_token_and_keyfile(db, settings, datastore, snapshot)
     snapshot_id = snapshot_identifier(group, snapshot)
     fingerprint = pbs_fingerprint(db, datastore)
     storage.ensure_output_dir(settings)

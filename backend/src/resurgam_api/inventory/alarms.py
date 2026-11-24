@@ -10,6 +10,7 @@ from resurgam_api.auth.scope import effective_group_customer_id
 from resurgam_api.instant_recovery import lifecycle as ir_lifecycle
 from resurgam_api.inventory.protection import evaluate_protection_status
 from resurgam_api.models.datastore import Datastore
+from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot, ProtectionPolicy, ProtectionStatus
 from resurgam_api.models.pve import PveCluster
 from resurgam_api.models.restore import RestorePlan, RestorePlanExecutionStatus, RestorePlanMethod
@@ -48,6 +49,10 @@ class AlarmType(str, Enum):
     # Backup encryption (ADR 0031): a group's newest backup uses a different key
     # than the one before it (or switched between encrypted and unencrypted).
     BACKUP_KEY_CHANGED = "backup_key_changed"
+    # ADR 0031 stage 2: current backups use a key that is not in the key store;
+    # a stored key has no confirmed copy outside RESURGAM.
+    ENCRYPTION_KEY_MISSING = "encryption_key_missing"
+    ENCRYPTION_KEY_COPY_UNCONFIRMED = "encryption_key_copy_unconfirmed"
 
 
 class AlarmSeverity(str, Enum):
@@ -251,6 +256,65 @@ def _encryption_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[Alar
     return alarms
 
 
+def _key_store_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut]:
+    """ADR 0031 stage 2. One `encryption_key_missing` alarm per datastore and
+    missing key (not per backup group -- one missing key would otherwise raise
+    hundreds), and for platform admins one `encryption_key_copy_unconfirmed`
+    per stored key nobody confirmed a safe copy of."""
+    stored = {row[0] for row in db.query(EncryptionKey.fingerprint)}
+    rows = (
+        db.query(BackupGroup.datastore_id, BackupSnapshot.key_fingerprint, func.count(func.distinct(BackupGroup.id)))
+        .join(BackupGroup, BackupGroup.id == BackupSnapshot.backup_group_id)
+        .filter(
+            BackupSnapshot.key_fingerprint.isnot(None),
+            BackupGroup.superseded_at.is_(None),
+            BackupGroup.removed_from_pbs_at.is_(None),
+        )
+        .group_by(BackupGroup.datastore_id, BackupSnapshot.key_fingerprint)
+        .all()
+    )
+    alarms: list[AlarmOut] = []
+    for datastore_id, fingerprint, group_count in rows:
+        if fingerprint.lower() in stored:
+            continue
+        assignment = get_datastore_assignment(db, datastore_id)
+        customer_id = assignment.customer_id if assignment else None
+        if visible is not None and customer_id not in visible:
+            continue
+        datastore = db.get(Datastore, datastore_id)
+        alarms.append(
+            AlarmOut(
+                type=AlarmType.ENCRYPTION_KEY_MISSING.value,
+                severity=AlarmSeverity.CRITICAL.value,
+                customer_id=customer_id,
+                message=(
+                    f"{group_count} backup group(s) in datastore {datastore.name if datastore else datastore_id} "
+                    f"are encrypted with key {_short_fp(fingerprint)}, which RESURGAM does not have -- they cannot "
+                    "be indexed, browsed or restored here. Upload the key under Administration -> Encryption keys."
+                ),
+                entity_type="datastore",
+                entity_id=datastore_id,
+            )
+        )
+    if visible is None:
+        for key in db.query(EncryptionKey).filter(EncryptionKey.copy_confirmed_at.is_(None)).all():
+            name = f" ({key.label})" if key.label else ""
+            alarms.append(
+                AlarmOut(
+                    type=AlarmType.ENCRYPTION_KEY_COPY_UNCONFIRMED.value,
+                    severity=AlarmSeverity.WARNING.value,
+                    customer_id=key.customer_id,
+                    message=(
+                        f"Encryption key {_short_fp(key.fingerprint)}{name}: no copy outside RESURGAM is confirmed. "
+                        "Print the key sheet or download the keyfile, store it safely and confirm the copy."
+                    ),
+                    entity_type="encryption_key",
+                    entity_id=key.id,
+                )
+            )
+    return alarms
+
+
 def _attach_customer_names(db: Session, alarms: list[AlarmOut]) -> None:
     """Every alarm carries a bare `customer_id` from the two collectors
     above; this resolves each to a display name + the three-letter
@@ -283,6 +347,7 @@ def compute_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut
         + _usage_alarms(db, visible)
         + _instant_recovery_alarms(db, visible, datetime.now(UTC))
         + _encryption_alarms(db, visible)
+        + _key_store_alarms(db, visible)
     )
     _attach_customer_names(db, alarms)
     return alarms

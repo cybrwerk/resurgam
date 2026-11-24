@@ -167,7 +167,7 @@ def claim_disk_mount_job(
         user_data=render_user_data(config, hostname=lifecycle.helper_name(mount.id)),
         smb_username=mount.smb_username,
         share_password=password,
-        encryption_keyfile=_resolve_encryption_keyfile(db, settings, datastore),
+        encryption_keyfile=_resolve_encryption_keyfile(db, settings, db.get(BackupSnapshot, mount.backup_snapshot_id)),
     )
     now = datetime.now(UTC)
     mount.status = DiskMountStatus.PROVISIONING.value

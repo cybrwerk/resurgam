@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
+from resurgam_api import encryption_keys
 from resurgam_api.api.v1._connection_helpers import upstream_error
 from resurgam_api.auth.dependency import get_current_user
 from resurgam_api.auth.models import AuthenticatedUser
@@ -117,6 +118,10 @@ def create_restore_plan(
             message="Instant Recovery runs VMs only; restore a container with the full method.",
             status_code=400,
         )
+    if instant:
+        # Instant Recovery reads the backup through RESURGAM's lab agent, which
+        # needs the backup's key (a full restore uses the PVE storage's own key).
+        encryption_keys.ensure_key_for_snapshot(db, snapshot)
     if instant and body.vmid_intent != RestorePlanVmidIntent.NEW:
         raise ResurgamApiError(
             code="instant_recovery_needs_free_vmid",

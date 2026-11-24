@@ -239,7 +239,7 @@ def claim_instant_recovery_job(
         network_bridge=plan.network_bridge,
         keep_mac=plan.ir_keep_mac,
         min_free_bytes=lifecycle.MIN_FREE_BYTES,
-        encryption_keyfile=_resolve_encryption_keyfile(db, settings, datastore),
+        encryption_keyfile=_resolve_encryption_keyfile(db, settings, db.get(BackupSnapshot, plan.backup_snapshot_id)),
     )
     now = datetime.now(UTC)
     plan.execution_status = S.MAPPING.value

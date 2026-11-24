@@ -6,6 +6,7 @@ import { ApiError } from "../api/client";
 import { billingApi, customersApi, fileIndexSettingsApi } from "../api/resources";
 import { AlertMailerPanel } from "../components/AlertMailerPanel";
 import { EmptyState } from "../components/EmptyState";
+import { EncryptionKeysPanel } from "../components/EncryptionKeys";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { QueryState } from "../components/QueryState";
@@ -132,6 +133,8 @@ export function CustomerPanelPage() {
             </Panel>
 
             <AlertMailerPanel customerId={customerId!} />
+
+            <EncryptionKeysPanel customerId={customerId!} />
 
             <Panel title={t("customerPanel.quickLinks")}>
               <div className={styles.quickLinks}>

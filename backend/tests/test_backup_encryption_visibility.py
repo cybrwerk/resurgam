@@ -159,7 +159,7 @@ def test_group_and_datastore_show_keys_and_a_key_change(client, platform_admin_h
     assert (g["latest_crypt_mode"], g["latest_key_fingerprint"]) == ("encrypt", FP_B)
     assert g["key_fingerprints"] == [FP_A, FP_B]
     assert g["key_changed"] is True
-    assert [x for x in groups.values() if x["backup_id"] == "101"][0]["key_changed"] is False
+    assert next(x for x in groups.values() if x["backup_id"] == "101")["key_changed"] is False
 
     snapshots = client.get(f"/api/v1/backup-groups/{changed}/snapshots", headers=platform_admin_headers).json()
     assert {s["crypt_mode"] for s in snapshots} == {"none", "encrypt"}

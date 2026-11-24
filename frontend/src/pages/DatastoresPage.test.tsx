@@ -6,7 +6,7 @@ import { ApiError } from "../api/client";
 
 import type { BackupGroupOut, CustomerOut, DatastoreOut, PbsInstanceOut, WhoAmIResponse } from "../api/types";
 import { renderWithProviders } from "../test/testUtils";
-import { DatastoresPage, keyfileProblem } from "./DatastoresPage";
+import { DatastoresPage } from "./DatastoresPage";
 
 vi.mock("../api/resources", () => ({
   pbsInstancesApi: {
@@ -23,8 +23,6 @@ vi.mock("../api/resources", () => ({
     backupGroups: vi.fn(),
     assignCustomer: vi.fn(),
     unassignCustomer: vi.fn(),
-    setEncryptionKey: vi.fn(),
-    removeEncryptionKey: vi.fn(),
   },
   authApi: { whoami: vi.fn() },
   protectionPoliciesApi: { list: vi.fn() },
@@ -451,7 +449,7 @@ describe("DatastoresPage — datastores removed from PBS", () => {
   });
 });
 
-const KEYFILE = JSON.stringify({ kdf: null, created: "2026-01-01T00:00:00Z", data: "abc", fingerprint: "aa:bb" });
+const FINGERPRINT = Array(32).fill("ab").join(":");
 
 function loginAs(roles: string[]) {
   const user = {
@@ -465,103 +463,25 @@ function loginAs(roles: string[]) {
   vi.mocked(authApi.whoami).mockResolvedValue(user);
 }
 
-describe("keyfileProblem", () => {
-  it("accepts a PBS keyfile without password", () => {
-    expect(keyfileProblem(KEYFILE)).toBeNull();
-  });
-  it("rejects non-JSON and JSON without key data", () => {
-    expect(keyfileProblem("not json")).toBe("datastores.encryptionKeyInvalidJson");
-    expect(keyfileProblem('{"foo": 1}')).toBe("datastores.encryptionKeyInvalidJson");
-  });
-  it("rejects a password-protected key", () => {
-    const protectedKey = JSON.stringify({ kdf: { Scrypt: { n: 65536, r: 8, p: 1, salt: "x" } }, data: "abc" });
-    expect(keyfileProblem(protectedKey)).toBe("datastores.encryptionKeyPasswordProtected");
-  });
-});
-
-describe("DatastoresPage encryption key", () => {
+describe("DatastoresPage encryption keys", () => {
   afterEach(() => {
     window.localStorage.removeItem("resurgam.token");
     vi.clearAllMocks();
   });
 
-  async function openTree(user: ReturnType<typeof userEvent.setup>) {
+  it("flags backups whose key RESURGAM does not have", async () => {
+    loginAs(["platform_admin"]);
+    setup();
+    vi.mocked(datastoresApi.list).mockResolvedValue([
+      { ...DATASTORE, key_fingerprints_in_use: [FINGERPRINT], keys_missing: [FINGERPRINT], encrypted_snapshot_count: 3 },
+    ]);
+    const user = userEvent.setup();
+    renderWithProviders(<DatastoresPage />);
     await waitFor(() => expect(screen.getByText("Primary PBS")).toBeInTheDocument());
     await user.click(screen.getAllByLabelText("Expand")[0]);
     await waitFor(() => expect(screen.getByText("main-store")).toBeInTheDocument());
-  }
 
-  it("is not offered to non-admins", async () => {
-    loginAs(["viewer"]);
-    setup();
-    const user = userEvent.setup();
-    renderWithProviders(<DatastoresPage />);
-    await openTree(user);
-    await waitFor(() => expect(authApi.whoami).toHaveBeenCalled());
+    expect(screen.getByText("Keys missing: 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Encryption key" })).not.toBeInTheDocument();
-  });
-
-  it("uploads a pasted key and blocks a password-protected one", async () => {
-    loginAs(["platform_admin"]);
-    setup();
-    vi.mocked(datastoresApi.setEncryptionKey).mockResolvedValue({ ...DATASTORE, encryption_key_configured: true });
-    const user = userEvent.setup();
-    renderWithProviders(<DatastoresPage />);
-    await openTree(user);
-
-    await user.click(await screen.findByRole("button", { name: "Encryption key" }));
-    const dialog = await screen.findByRole("dialog", { name: "Encryption key — main-store" });
-    expect(within(dialog).getByText("No key stored")).toBeInTheDocument();
-    const textarea = within(dialog).getByLabelText("…or paste its content");
-    const save = within(dialog).getByRole("button", { name: "Save key" });
-    expect(save).toBeDisabled();
-
-    await user.click(textarea);
-    await user.paste(JSON.stringify({ kdf: { Scrypt: {} }, data: "abc" }));
-    expect(within(dialog).getByRole("alert")).toHaveTextContent("password-protected");
-    expect(save).toBeDisabled();
-
-    await user.clear(textarea);
-    await user.paste(KEYFILE);
-    expect(save).toBeEnabled();
-    await user.click(save);
-    await waitFor(() => expect(datastoresApi.setEncryptionKey).toHaveBeenCalledWith("ds-1", KEYFILE));
-  });
-
-  it("reads the key from an uploaded file", async () => {
-    loginAs(["platform_admin"]);
-    setup();
-    vi.mocked(datastoresApi.setEncryptionKey).mockResolvedValue({ ...DATASTORE, encryption_key_configured: true });
-    const user = userEvent.setup();
-    renderWithProviders(<DatastoresPage />);
-    await openTree(user);
-
-    await user.click(await screen.findByRole("button", { name: "Encryption key" }));
-    const dialog = await screen.findByRole("dialog", { name: "Encryption key — main-store" });
-    await user.upload(within(dialog).getByLabelText("Key file"), new File([KEYFILE], "site-b.enc"));
-    await waitFor(() => expect(within(dialog).getByLabelText("…or paste its content")).toHaveValue(KEYFILE));
-    await user.click(within(dialog).getByRole("button", { name: "Save key" }));
-    await waitFor(() => expect(datastoresApi.setEncryptionKey).toHaveBeenCalledWith("ds-1", KEYFILE));
-  });
-
-  it("shows a stored key and removes it after confirmation", async () => {
-    loginAs(["platform_admin"]);
-    setup();
-    vi.mocked(datastoresApi.list).mockResolvedValue([{ ...DATASTORE, encryption_key_configured: true }]);
-    vi.mocked(datastoresApi.removeEncryptionKey).mockResolvedValue({ ...DATASTORE, encryption_key_configured: false });
-    const user = userEvent.setup();
-    renderWithProviders(<DatastoresPage />);
-    await openTree(user);
-
-    expect(screen.getByText("Key stored")).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Encryption key" }));
-    const dialog = await screen.findByRole("dialog", { name: "Encryption key — main-store" });
-    expect(within(dialog).getByRole("button", { name: "Replace key" })).toBeDisabled();
-
-    await user.click(within(dialog).getByRole("button", { name: "Remove key" }));
-    const confirm = await screen.findByRole("dialog", { name: "Remove the encryption key of main-store?" });
-    expect(datastoresApi.removeEncryptionKey).not.toHaveBeenCalled();
-    await user.click(within(confirm).getByRole("button", { name: "Remove key" }));
-    await waitFor(() => expect(datastoresApi.removeEncryptionKey).toHaveBeenCalledWith("ds-1"));
   });
 });

@@ -18,9 +18,7 @@ import type {
   DatastoreRole,
   PbsInstanceOut,
 } from "../api/types";
-import { ConfirmActionDialog } from "../components/ConfirmActionDialog";
 import { DatastoreJobsModal } from "../components/DatastoreJobsModal";
-import { useAuth } from "../contexts/AuthContext";
 import { useSelectedCustomer } from "../contexts/CustomerContext";
 import { EmptyState } from "../components/EmptyState";
 import { FileBrowserModal } from "../components/FileBrowserModal";
@@ -264,146 +262,6 @@ function DatastoreMaintenanceModal({
   );
 }
 
-/** Client-side check of a PBS keyfile before upload: it must be the JSON
- * PBS/PVE write, and not password-protected (`kdf` set) -- RESURGAM reads
- * backups unattended and never has a key password, same as PVE itself.
- * Returns an i18n key for the problem, or null when it looks usable. */
-export function keyfileProblem(content: string): string | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return "datastores.encryptionKeyInvalidJson";
-  }
-  if (typeof parsed !== "object" || parsed === null || !("data" in parsed)) {
-    return "datastores.encryptionKeyInvalidJson";
-  }
-  if ((parsed as { kdf?: unknown }).kdf) return "datastores.encryptionKeyPasswordProtected";
-  return null;
-}
-
-function DatastoreEncryptionKeyModal({ datastore, onClose }: { datastore: DatastoreOut; onClose: () => void }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [content, setContent] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const configured = Boolean(datastore.encryption_key_configured);
-  const trimmed = content.trim();
-  const problem = trimmed ? keyfileProblem(trimmed) : null;
-
-  const onSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: DATASTORES_KEY });
-    onClose();
-  };
-  const onError = (err: unknown) => setError(err instanceof ApiError ? err.message : t("common.loadError"));
-  const saveMutation = useMutation({
-    mutationFn: () => datastoresApi.setEncryptionKey(datastore.id, trimmed),
-    onSuccess,
-    onError,
-  });
-  const removeMutation = useMutation({
-    mutationFn: () => datastoresApi.removeEncryptionKey(datastore.id),
-    onSuccess,
-    onError,
-  });
-  const busy = saveMutation.isPending || removeMutation.isPending;
-
-  const readFile = (file: File | undefined) => {
-    if (!file) return;
-    file
-      .text()
-      .then(setContent)
-      .catch(() => setError(t("datastores.encryptionKeyReadFailed")));
-  };
-
-  return (
-    <Modal open title={t("datastores.encryptionKeyModalTitle", { name: datastore.name })} onClose={onClose}>
-      {error && (
-        <div className={styles.alert}>
-          <InlineAlert>{error}</InlineAlert>
-        </div>
-      )}
-      <p>
-        <StatusBadge
-          tone={configured ? "ok" : "unknown"}
-          label={configured ? t("datastores.encryptionKeyStatusSet") : t("datastores.encryptionKeyStatusUnset")}
-        />
-      </p>
-      <p className="mutedText">{t("datastores.encryptionKeyIntro")}</p>
-      <div className="field">
-        <label className="label" htmlFor="encryption-key-file">
-          {t("datastores.encryptionKeyFile")}
-        </label>
-        <input
-          id="encryption-key-file"
-          className="input"
-          type="file"
-          accept=".enc,.json,.key,application/json,text/plain"
-          onChange={(e) => readFile(e.target.files?.[0])}
-        />
-      </div>
-      <div className="field">
-        <label className="label" htmlFor="encryption-key-content">
-          {t("datastores.encryptionKeyPaste")}
-        </label>
-        <textarea
-          id="encryption-key-content"
-          className="input"
-          rows={6}
-          spellCheck={false}
-          autoComplete="off"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          aria-invalid={problem !== null}
-          placeholder='{"kdf": null, "created": "…", "data": "…", "fingerprint": "…"}'
-        />
-        {problem && (
-          <span className="mutedText" role="alert">
-            {t(problem)}
-          </span>
-        )}
-      </div>
-      <p className="mutedText">{t("datastores.encryptionKeyWriteOnly")}</p>
-      <div className="formActions">
-        {configured && (
-          <button
-            type="button"
-            className="button buttonDanger"
-            onClick={() => setConfirmRemove(true)}
-            disabled={busy}
-          >
-            {t("datastores.encryptionKeyRemove")}
-          </button>
-        )}
-        <button type="button" className="button" onClick={onClose} disabled={busy}>
-          {t("common.cancel")}
-        </button>
-        <button
-          type="button"
-          className="button buttonPrimary"
-          onClick={() => saveMutation.mutate()}
-          disabled={busy || !trimmed || problem !== null}
-        >
-          {configured ? t("datastores.encryptionKeyReplace") : t("datastores.encryptionKeySave")}
-        </button>
-      </div>
-      <ConfirmActionDialog
-        open={confirmRemove}
-        title={t("datastores.encryptionKeyRemoveTitle", { name: datastore.name })}
-        body={t("datastores.encryptionKeyRemoveBody")}
-        confirmLabel={t("datastores.encryptionKeyRemove")}
-        danger
-        onConfirm={() => {
-          setConfirmRemove(false);
-          removeMutation.mutate();
-        }}
-        onCancel={() => setConfirmRemove(false)}
-      />
-    </Modal>
-  );
-}
-
 function DatastoreAttestationModal({ datastore, onClose }: { datastore: DatastoreOut; onClose: () => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -521,10 +379,6 @@ export function DatastoresPage() {
   const [maintenanceTarget, setMaintenanceTarget] = useState<DatastoreOut | null>(null);
   const [attestationTarget, setAttestationTarget] = useState<DatastoreOut | null>(null);
   const [jobsTarget, setJobsTarget] = useState<DatastoreOut | null>(null);
-  const [encryptionKeyTarget, setEncryptionKeyTarget] = useState<DatastoreOut | null>(null);
-  // The encryption-key endpoints are platform_admin only.
-  const { hasRole } = useAuth();
-  const canManageKeys = hasRole("platform_admin");
 
   const instancesQuery = useQuery({ queryKey: ["pbs-instances"], queryFn: pbsInstancesApi.list });
 
@@ -851,15 +705,13 @@ export function DatastoresPage() {
                 />
               </span>
             )}
-            {datastore.encryption_key_configured && (
-              <span title={t("datastores.encryptionKeyConfiguredHint")}>
-                <StatusBadge tone="info" label={t("datastores.encryptionKeyConfigured")} />
+            {(datastore.keys_missing?.length ?? 0) > 0 && (
+              <span title={`${t("encryptionKeys.datastoreKeysMissingHint")}\n${(datastore.keys_missing ?? []).join("\n")}`}>
+                <StatusBadge
+                  tone="danger"
+                  label={t("encryptionKeys.datastoreKeysMissing", { count: datastore.keys_missing?.length ?? 0 })}
+                />
               </span>
-            )}
-            {canManageKeys && !removedFromPbs && (
-              <button type="button" className="button" onClick={() => setEncryptionKeyTarget(datastore)}>
-                {t("datastores.encryptionKey")}
-              </button>
             )}
           </span>
         </div>
@@ -1020,9 +872,6 @@ export function DatastoresPage() {
       )}
 
       {jobsTarget && <DatastoreJobsModal datastore={jobsTarget} onClose={() => setJobsTarget(null)} />}
-      {encryptionKeyTarget && (
-        <DatastoreEncryptionKeyModal datastore={encryptionKeyTarget} onClose={() => setEncryptionKeyTarget(null)} />
-      )}
     </div>
   );
 }

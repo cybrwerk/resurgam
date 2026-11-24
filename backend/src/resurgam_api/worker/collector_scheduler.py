@@ -67,6 +67,7 @@ from resurgam_api.collector.heartbeat import (
 from resurgam_api.collector.sync import sync_pbs_instance
 from resurgam_api.config import get_settings
 from resurgam_api.db import get_session_factory
+from resurgam_api.encryption_keys import adopt_datastore_keys
 from resurgam_api.instance_settings import effective_collector_poll_interval_minutes
 from resurgam_api.models.pbs import PbsInstance
 from resurgam_api.pve_job_reenable import run_due_reenables
@@ -117,6 +118,15 @@ def run_tick(db: Session, settings) -> None:
     except Exception:  # a PVE problem must never hold up the collector
         db.rollback()
         logger.exception("collector scheduler: automatic backup job re-enable pass failed")
+
+    try:
+        # ADR 0031: move earlier per-datastore keys (ADR 0022) into the key
+        # store. A no-op once done; cheap enough to check every tick.
+        if adopt_datastore_keys(db, settings):
+            db.commit()
+    except Exception:  # never hold up the collector
+        db.rollback()
+        logger.exception("collector scheduler: moving datastore encryption keys into the key store failed")
 
     try:
         interval_minutes = effective_collector_poll_interval_minutes(db)

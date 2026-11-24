@@ -84,12 +84,34 @@ def test_repository_token_and_keyfile_returns_none_when_unconfigured(db_session,
     assert keyfile is None
 
 
-def test_repository_token_and_keyfile_resolves_configured_key(db_session, test_settings):
-    datastore = _pbs_instance_and_datastore(db_session, test_settings, with_encryption_key=True)
+def test_repository_token_and_keyfile_picks_the_key_of_the_snapshot(db_session, test_settings):
+    """ADR 0031: exactly the key the backup was made with, none for an
+    unencrypted backup in the same datastore, and a clear 409 for a key
+    RESURGAM does not hold."""
+    import json
 
-    _repository, _token, keyfile = repository_token_and_keyfile(db_session, test_settings, datastore)
+    import pytest
 
-    assert keyfile == "keyfile-plaintext"
+    from resurgam_api import encryption_keys
+    from resurgam_api.filerestore.browse import FileRestoreError
+
+    datastore = _pbs_instance_and_datastore(db_session, test_settings, with_encryption_key=False)
+    group = BackupGroup(datastore_id=datastore.id, backup_type="ct", backup_id="100")
+    db_session.add(group)
+    db_session.flush()
+    fp_stored, fp_missing = ":".join(["aa"] * 32), ":".join(["bb"] * 32)
+    keyfile_content = json.dumps({"kdf": None, "data": "x", "fingerprint": fp_stored})
+    encryption_keys.store_key(db_session, test_settings, keyfile_content)
+
+    def snapshot(fingerprint):
+        return BackupSnapshot(backup_group_id=group.id, snapshot_time=datetime.now(UTC), key_fingerprint=fingerprint)
+
+    assert repository_token_and_keyfile(db_session, test_settings, datastore, snapshot(fp_stored))[2] == keyfile_content
+    assert repository_token_and_keyfile(db_session, test_settings, datastore, snapshot(None))[2] is None
+    with pytest.raises(FileRestoreError) as exc:
+        repository_token_and_keyfile(db_session, test_settings, datastore, snapshot(fp_missing))
+    assert exc.value.code == "encryption_key_missing"
+    assert exc.value.status_code == 409
 
 
 def test_pbs_fingerprint_only_for_pinned_instances(db_session, test_settings):

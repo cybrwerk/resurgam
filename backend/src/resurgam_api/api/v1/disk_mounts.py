@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
+from resurgam_api import encryption_keys
 from resurgam_api.api.v1._connection_helpers import upstream_error
 from resurgam_api.auth.dependency import get_current_user, require_role
 from resurgam_api.auth.models import AuthenticatedUser
@@ -423,6 +424,7 @@ def create_disk_mount(
     cluster requires four-eyes approval. The response carries the SMB password
     -- the only time it is ever shown. Audited (without the password)."""
     snapshot, group, datastore = _snapshot_context(db, body.backup_snapshot_id)
+    encryption_keys.ensure_key_for_snapshot(db, snapshot)
     require_restore_access(db, user, group)
     _require_vm(group)
 

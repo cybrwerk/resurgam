@@ -16,6 +16,7 @@ from resurgam_api.api.v1 import (
     datastores,
     disk_mount_setup,
     disk_mounts,
+    encryption_keys,
     file_index,
     filerestore,
     instance_settings,
@@ -100,3 +101,4 @@ router.include_router(config_backup.router)
 router.include_router(update_source.router)
 router.include_router(updates.router)
 router.include_router(api_tokens.router)
+router.include_router(encryption_keys.router)
