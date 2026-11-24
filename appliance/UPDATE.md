@@ -32,9 +32,9 @@ while the API restarts -- that is expected.
 ### From GitHub (or GitLab), without uploading
 
 System Settings -> Updates -> **Update source** (ADR 0026): the repository URL is pre-filled with
-`https://github.com/cybrwerk/resurgam`. That repository is private, so paste a personal
-access token too -- a fine-grained token limited to this repository with **Contents: read-only** is
-enough (a classic token needs `repo`). **Test connection** checks URL and token before you save;
+`https://github.com/cybrwerk/resurgam`. That repository is public, so no token is needed. For a
+private repository (your own fork or mirror) paste a personal access token too -- a fine-grained
+token limited to that repository with **Contents: read-only** is enough (a classic token needs `repo`). **Test connection** checks URL and token before you save;
 the token is stored encrypted and never shown again (leave the field empty to keep it, tick
 "Remove the stored token" to delete it). Once saved, the panel shows a read-only summary
 (repository, provider, whether a token is stored, automatic check interval, last check) with
