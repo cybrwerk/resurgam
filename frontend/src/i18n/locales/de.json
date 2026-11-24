@@ -2357,5 +2357,18 @@
     "maintenanceConfirm": "Trotzdem setzen",
     "pbsWarning_one": "1 VM läuft direkt aus einem Backup auf diesem PBS ({{datastores}}). Wird PBS, sein Netz oder der Datastore gestoppt, bekommt sie I/O-Fehler.",
     "pbsWarning_other": "{{count}} VMs laufen direkt aus Backups auf diesem PBS ({{datastores}}). Wird PBS, sein Netz oder der Datastore gestoppt, bekommen sie I/O-Fehler."
+  },
+  "encryption": {
+    "none": "Nicht verschlüsselt",
+    "encrypted": "Verschlüsselt",
+    "encryptedWith": "Verschlüsselt · {{key}}",
+    "signOnly": "Nur signiert",
+    "mixed": "Teilweise verschlüsselt",
+    "keyTitle": "Fingerprint des Schlüssels: {{fingerprint}}",
+    "keyChanged": "Schlüssel gewechselt",
+    "keyChangedHint": "Das neueste Backup verwendet einen anderen Schlüssel (oder keinen) als das Backup davor. Ältere und neuere Backups brauchen zum Wiederherstellen unterschiedliche Schlüssel.",
+    "column": "Verschlüsselung",
+    "keysInUse": "Verwendete Schlüssel",
+    "keysInUseHint": "{{count}} verschlüsselte Backups in diesem Datastore, nach Schlüssel-Fingerprint."
   }
 }

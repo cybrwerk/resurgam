@@ -12,6 +12,7 @@ import { PageHeader } from "../components/PageHeader";
 import { PriorGenerationsModal } from "../components/PriorGenerationsModal";
 import { RestorePointsModal } from "../components/RestorePointsModal";
 import { StatusBadge } from "../components/StatusBadge";
+import { EncryptionBadge } from "../components/EncryptionBadge";
 import { ApiError } from "../api/client";
 import { useSelectedCustomer } from "../contexts/CustomerContext";
 import { backupStaleness } from "../lib/backupStaleness";
@@ -175,6 +176,18 @@ export function ProtectedWorkloadsPage({ titleKey, backupType }: ProtectedWorklo
         return <StatusBadge tone={tone} label={label} />;
       },
       sortValue: (row) => row.last_verify_status,
+    },
+    {
+      key: "encryption",
+      header: t("encryption.column"),
+      render: (row) => (
+        <EncryptionBadge
+          mode={row.latest_crypt_mode}
+          fingerprint={row.latest_key_fingerprint}
+          keyChanged={row.key_changed}
+        />
+      ),
+      sortValue: (row) => row.latest_key_fingerprint ?? row.latest_crypt_mode ?? "",
     },
     {
       key: "protectionStatus",

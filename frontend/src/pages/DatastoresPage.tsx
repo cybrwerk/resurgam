@@ -40,6 +40,7 @@ import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { StatusBadge } from "../components/StatusBadge";
+import { shortFingerprint } from "../components/EncryptionBadge";
 import { formatBytes } from "../lib/formatBytes";
 import { protectionStatusPresentation, verifyStatusPresentation } from "../lib/statusPresentation";
 import { ApiError } from "../api/client";
@@ -837,6 +838,18 @@ export function DatastoresPage() {
               <button type="button" className="button" onClick={() => setJobsTarget(datastore)}>
                 {t("datastores.jobs")}
               </button>
+            )}
+            {(datastore.key_fingerprints_in_use?.length ?? 0) > 0 && (
+              <span
+                title={`${t("encryption.keysInUseHint", { count: datastore.encrypted_snapshot_count ?? 0 })}\n${(
+                  datastore.key_fingerprints_in_use ?? []
+                ).join("\n")}`}
+              >
+                <StatusBadge
+                  tone="info"
+                  label={`${t("encryption.keysInUse")}: ${(datastore.key_fingerprints_in_use ?? []).map(shortFingerprint).join(", ")}`}
+                />
+              </span>
             )}
             {datastore.encryption_key_configured && (
               <span title={t("datastores.encryptionKeyConfiguredHint")}>

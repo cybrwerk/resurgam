@@ -64,6 +64,17 @@ class DatastoreOut(BaseModel):
             "client-side encrypted backups. The key itself is never returned."
         ),
     )
+    key_fingerprints_in_use: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Every encryption key fingerprint used by a current backup in this datastore (ADR 0031), sorted. "
+            "Empty when no backup is encrypted or the inventory has not been synced since this was added."
+        ),
+    )
+    encrypted_snapshot_count: int = Field(
+        default=0,
+        description="How many current backups in this datastore are client-side encrypted.",
+    )
     removed_from_pbs_at: datetime | None = Field(
         default=None,
         description=(

@@ -2357,5 +2357,18 @@
     "maintenanceConfirm": "Set it anyway",
     "pbsWarning_one": "1 VM runs straight from a backup on this PBS ({{datastores}}). Stopping PBS, its network or the datastore gives it I/O errors.",
     "pbsWarning_other": "{{count}} VMs run straight from backups on this PBS ({{datastores}}). Stopping PBS, its network or the datastore gives them I/O errors."
+  },
+  "encryption": {
+    "none": "Not encrypted",
+    "encrypted": "Encrypted",
+    "encryptedWith": "Encrypted · {{key}}",
+    "signOnly": "Signed only",
+    "mixed": "Partly encrypted",
+    "keyTitle": "Encryption key fingerprint: {{fingerprint}}",
+    "keyChanged": "Key changed",
+    "keyChangedHint": "The newest backup uses a different encryption key (or none) than the backup before it. Older and newer backups need different keys to restore.",
+    "column": "Encryption",
+    "keysInUse": "Keys in use",
+    "keysInUseHint": "{{count}} encrypted backups in this datastore, by key fingerprint."
   }
 }

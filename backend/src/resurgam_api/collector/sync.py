@@ -416,6 +416,8 @@ def sync_datastore_inventory(
                 if group is not None and existing.backup_group_id == group.id:
                     existing.verify_status = verify_status
                     existing.size_bytes = snap.size
+                    existing.crypt_mode = snap.crypt_mode
+                    existing.key_fingerprint = snap.key_fingerprint
                     existing.last_synced_at = now
                     group.last_backup_at = snapshot_time
                     group.last_verify_status = verify_status
@@ -495,6 +497,8 @@ def sync_datastore_inventory(
                     snapshot_time=snapshot_time,
                     verify_status=verify_status,
                     size_bytes=snap.size,
+                    crypt_mode=snap.crypt_mode,
+                    key_fingerprint=snap.key_fingerprint,
                 )
             )
             group.last_backup_at = snapshot_time

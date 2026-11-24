@@ -45,6 +45,24 @@ class BackupGroupOut(BaseModel):
             "split-on-rename behavior. Null means this is the current generation."
         ),
     )
+    latest_crypt_mode: str | None = Field(
+        default=None,
+        description="Encryption of this group's newest backup ('none', 'encrypt', 'sign-only', 'mixed'), "
+        "or null when not known yet.",
+    )
+    latest_key_fingerprint: str | None = Field(
+        default=None,
+        description="Key fingerprint of this group's newest backup, null if it is unencrypted.",
+    )
+    key_fingerprints: list[str] = Field(
+        default_factory=list,
+        description="Every encryption key fingerprint used by any backup of this group, oldest first. More than "
+        "one means the key was changed: older and newer backups need different keys.",
+    )
+    key_changed: bool = Field(
+        default=False,
+        description="True when the newest backup uses a different key (or no key) than the backup before it.",
+    )
     removed_from_pbs_at: datetime | None = Field(
         default=None,
         description=(
@@ -88,6 +106,17 @@ class BackupSnapshotOut(BaseModel):
     snapshot_time: datetime
     verify_status: str
     size_bytes: int | None
+    crypt_mode: str | None = Field(
+        default=None,
+        description="Client-side encryption of this backup's data as PBS reports it: 'none', 'encrypt', "
+        "'sign-only' (signed but readable), 'mixed' (archives differ), or null when not known yet "
+        "(the next inventory sync fills it in).",
+    )
+    key_fingerprint: str | None = Field(
+        default=None,
+        description="Fingerprint of the encryption key this backup was made with (e.g. 'ad:a6:9b:...'), "
+        "null for an unencrypted backup. Reading the backup needs exactly this key.",
+    )
     last_synced_at: datetime
 
 
