@@ -118,6 +118,8 @@
     "or": "oder",
     "signingIn": "Anmeldung läuft…",
     "invalidCredentials": "Ungültige Anmeldedaten.",
+    "loginLocked_one": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Minute erneut.",
+    "loginLocked_other": "Zu viele Fehlversuche. Versuchen Sie es in {{count}} Minuten erneut.",
     "breakglassDisabled": "Die lokale Anmeldung ist deaktiviert.",
     "ssoFailed": "Single Sign-On ist fehlgeschlagen. Bitte erneut versuchen.",
     "ssoProvisioningFailed": "Single Sign-On war erfolgreich, aber Ihr Konto konnte nicht eingerichtet werden.",

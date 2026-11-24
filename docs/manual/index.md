@@ -235,6 +235,25 @@ Try these in order:
    7. Switch break-glass off again: `BREAKGLASS_ENABLED=false` in `.env`, then `docker compose up -d`.
       Break-glass sign-ins are recorded in the Audit Log (`breakglass_login`).
 
+### Too many wrong passwords
+
+Five wrong attempts within 15 minutes lock that sign-in for the rest of the 15 minutes — the right
+password is refused too, and the sign-in page says how many minutes are left. Counted separately:
+
+- **Local sign-in**, per email address. Addresses without an account lock the same way, so the lock
+  gives away nothing about which accounts exist.
+- **Break-glass sign-in** (one account).
+- **Authenticator and recovery codes** at the second sign-in step, per account (both together).
+- **With a session open**, per account: the current password when changing it, and the password or
+  code that confirms a key download, key sheet or key export (both together).
+
+A successful sign-in starts the count again. Every wrong attempt is in the Audit Log
+(`local_login_failed`, `breakglass_login_failed`, `mfa_totp_failed`, `mfa_recovery_code_failed`,
+`password_change_failed`, `step_up_confirmation_failed`). There is no early unlock: the count comes from
+the audit log, which cannot be changed, so a locked sign-in simply waits out the 15 minutes. Anyone
+can lock an address this way by guessing wrong on purpose; other accounts and SSO sign-in keep working
+meanwhile.
+
 ### API tokens
 
 For scripts, CI jobs and monitoring (e.g. Zabbix) every user can create personal API tokens under

@@ -118,6 +118,8 @@
     "or": "or",
     "signingIn": "Signing in…",
     "invalidCredentials": "Invalid credentials.",
+    "loginLocked_one": "Too many wrong attempts. Try again in {{count}} minute.",
+    "loginLocked_other": "Too many wrong attempts. Try again in {{count}} minutes.",
     "breakglassDisabled": "Local sign-in is disabled.",
     "ssoFailed": "Single sign-on failed. Please try again.",
     "ssoProvisioningFailed": "Single sign-on succeeded but your account could not be set up.",

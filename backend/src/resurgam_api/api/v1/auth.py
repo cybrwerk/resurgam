@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from webauthn.helpers.exceptions import InvalidAuthenticationResponse
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
+from resurgam_api.auth import attempt_limit
 from resurgam_api.auth.audit import record_login_audit_event
 from resurgam_api.auth.breakglass import get_or_create_breakglass_user, verify_credentials
 from resurgam_api.auth.dependency import get_current_user, get_session_user
@@ -62,6 +63,25 @@ from resurgam_api.secrets.local_provider import LocalEncryptedSecretsProvider
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _login_failed(
+    db: Session,
+    message: str,
+    code: str,
+    limit: attempt_limit.Limit,
+    *,
+    locked_code: str = "login_locked",
+    **key,
+) -> ResurgamApiError:
+    """The error for a wrong password or code that was just audited: 401
+    with `attempts_left`, or 429 `locked_code` when this failure used up the
+    last attempt (see `auth.attempt_limit`)."""
+    left = attempt_limit.attempts_left(db, limit, **key)
+    if left == 0:
+        _count, oldest = attempt_limit.recent_failures(db, limit, **key)
+        return attempt_limit.locked_error(locked_code, oldest)
+    return ResurgamApiError(code=code, message=message, status_code=401, details={"attempts_left": left})
+
+
 def _confirmed_totp(db: Session, user_id) -> TotpCredential | None:
     return (
         db.query(TotpCredential)
@@ -70,18 +90,32 @@ def _confirmed_totp(db: Session, user_id) -> TotpCredential | None:
     )
 
 
-@router.post("/breakglass-login", response_model=BreakglassLoginResponse)
+@router.post(
+    "/breakglass-login",
+    response_model=BreakglassLoginResponse,
+    responses={
+        401: {"description": "`invalid_credentials`; `details.attempts_left` says how many tries remain."},
+        429: {
+            "description": "`login_locked`: 5 wrong passwords within 15 minutes -- refused, even with the right password, "
+            "until `details.retry_after_seconds` have passed."
+        },
+    },
+)
 def breakglass_login(
     body: BreakglassLoginRequest,
     request: Request,
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> BreakglassLoginResponse:
+    """Signs in with the single break-glass account from the appliance's
+    `.env` (403 `breakglass_disabled` unless enabled there). Wrong passwords
+    are audited and limited like every login (`auth.attempt_limit`)."""
     correlation_id = getattr(request.state, "correlation_id", None)
 
     if not settings.breakglass_enabled:
         raise ResurgamApiError(code="breakglass_disabled", message="Break-glass login is disabled.", status_code=403)
 
+    attempt_limit.refuse_if_locked(db, attempt_limit.BREAKGLASS_LOGIN, code="login_locked")
     if not verify_credentials(settings, body.username, body.password):
         record_login_audit_event(
             db,
@@ -90,7 +124,9 @@ def breakglass_login(
             detail={"username": body.username},
         )
         db.commit()
-        raise ResurgamApiError(code="invalid_credentials", message="Invalid break-glass credentials.", status_code=401)
+        raise _login_failed(
+            db, "Invalid break-glass credentials.", "invalid_credentials", attempt_limit.BREAKGLASS_LOGIN
+        )
 
     user = get_or_create_breakglass_user(db, settings)
     token, expires_in = create_session_token(user.id, settings)
@@ -106,7 +142,19 @@ def breakglass_login(
     return BreakglassLoginResponse(access_token=token, expires_in=expires_in)
 
 
-@router.post("/local-login", response_model=LocalLoginResponse)
+@router.post(
+    "/local-login",
+    response_model=LocalLoginResponse,
+    responses={
+        401: {
+            "description": "`invalid_credentials` (unknown address or wrong password); `details.attempts_left` says how many tries remain."
+        },
+        429: {
+            "description": "`login_locked`: 5 wrong passwords for this address within 15 minutes -- refused, even with the right password, "
+            "until `details.retry_after_seconds` have passed."
+        },
+    },
+)
 def local_login(
     body: LocalLoginRequest,
     request: Request,
@@ -117,10 +165,13 @@ def local_login(
     distinct from the single break-glass credential above. Same error
     message for "no such email" and "wrong password" (`invalid_credentials`),
     same as break-glass — nothing here should let a caller distinguish
-    the two and enumerate valid emails.
+    the two and enumerate valid emails. Wrong passwords are limited per
+    address (`auth.attempt_limit`); an unknown address is limited the same
+    way, so the limit does not reveal accounts either.
     """
     correlation_id = getattr(request.state, "correlation_id", None)
 
+    attempt_limit.refuse_if_locked(db, attempt_limit.LOCAL_LOGIN, code="login_locked", email=body.email)
     user = db.query(User).filter_by(email=body.email).one_or_none()
     invalid = user is None or user.disabled or user.password_hash is None
     if not invalid and not verify_password(body.password, user.password_hash):
@@ -131,7 +182,9 @@ def local_login(
             db, action="local_login_failed", correlation_id=correlation_id, detail={"email": body.email}
         )
         db.commit()
-        raise ResurgamApiError(code="invalid_credentials", message="Invalid email or password.", status_code=401)
+        raise _login_failed(
+            db, "Invalid email or password.", "invalid_credentials", attempt_limit.LOCAL_LOGIN, email=body.email
+        )
 
     totp = _confirmed_totp(db, user.id)
     webauthn_count = db.query(WebauthnCredential).filter_by(user_id=user.id).count()
@@ -253,15 +306,30 @@ def _resolve_mfa_challenge(token: str, settings: Settings, db: Session) -> User:
     return user
 
 
-@router.post("/mfa/verify-totp", response_model=BreakglassLoginResponse)
+@router.post(
+    "/mfa/verify-totp",
+    response_model=BreakglassLoginResponse,
+    responses={
+        401: {"description": "`invalid_code`; `details.attempts_left` says how many tries remain."},
+        429: {
+            "description": "`login_locked`: 5 wrong authenticator or recovery codes for this account within 15 minutes -- refused, even with the right code, "
+            "until `details.retry_after_seconds` have passed."
+        },
+    },
+)
 def verify_totp(
     body: VerifyTotpRequest,
     request: Request,
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> BreakglassLoginResponse:
+    """Second login step: exchanges the `challenge_token` from
+    `/auth/local-login` and a current authenticator code for a session. Wrong
+    codes are audited and limited per account, together with recovery codes
+    (`auth.attempt_limit`)."""
     correlation_id = getattr(request.state, "correlation_id", None)
     user = _resolve_mfa_challenge(body.challenge_token, settings, db)
+    attempt_limit.refuse_if_locked(db, attempt_limit.SECOND_FACTOR, code="login_locked", actor_user_id=user.id)
     totp = _confirmed_totp(db, user.id)
     if totp is None:
         raise ResurgamApiError(
@@ -277,7 +345,9 @@ def verify_totp(
             db, action="mfa_totp_failed", actor_user_id=user.id, correlation_id=correlation_id, detail={}
         )
         db.commit()
-        raise ResurgamApiError(code="invalid_code", message="Invalid TOTP code.", status_code=401)
+        raise _login_failed(
+            db, "Invalid TOTP code.", "invalid_code", attempt_limit.SECOND_FACTOR, actor_user_id=user.id
+        )
 
     token, expires_in = create_session_token(user.id, settings)
     record_login_audit_event(db, action="mfa_totp_ok", actor_user_id=user.id, correlation_id=correlation_id, detail={})
@@ -285,15 +355,29 @@ def verify_totp(
     return BreakglassLoginResponse(access_token=token, expires_in=expires_in)
 
 
-@router.post("/mfa/verify-recovery-code", response_model=BreakglassLoginResponse)
+@router.post(
+    "/mfa/verify-recovery-code",
+    response_model=BreakglassLoginResponse,
+    responses={
+        401: {"description": "`invalid_code`; `details.attempts_left` says how many tries remain."},
+        429: {
+            "description": "`login_locked`: 5 wrong authenticator or recovery codes for this account within 15 minutes -- refused, even with the right code, "
+            "until `details.retry_after_seconds` have passed."
+        },
+    },
+)
 def verify_recovery_code_endpoint(
     body: VerifyRecoveryCodeRequest,
     request: Request,
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> BreakglassLoginResponse:
+    """Second login step with a one-time recovery code instead of the
+    authenticator; the code is used up. Wrong codes count towards the same
+    per-account limit as authenticator codes (`auth.attempt_limit`)."""
     correlation_id = getattr(request.state, "correlation_id", None)
     user = _resolve_mfa_challenge(body.challenge_token, settings, db)
+    attempt_limit.refuse_if_locked(db, attempt_limit.SECOND_FACTOR, code="login_locked", actor_user_id=user.id)
 
     candidates = db.query(RecoveryCode).filter_by(user_id=user.id, used_at=None).all()
     match = next((c for c in candidates if verify_recovery_code(body.code, c.code_hash)), None)
@@ -302,7 +386,13 @@ def verify_recovery_code_endpoint(
             db, action="mfa_recovery_code_failed", actor_user_id=user.id, correlation_id=correlation_id, detail={}
         )
         db.commit()
-        raise ResurgamApiError(code="invalid_code", message="Invalid or already-used recovery code.", status_code=401)
+        raise _login_failed(
+            db,
+            "Invalid or already-used recovery code.",
+            "invalid_code",
+            attempt_limit.SECOND_FACTOR,
+            actor_user_id=user.id,
+        )
 
     match.used_at = datetime.now(UTC)
     token, expires_in = create_session_token(user.id, settings)
@@ -399,13 +489,30 @@ def webauthn_authenticate(
     return BreakglassLoginResponse(access_token=token, expires_in=expires_in)
 
 
-@router.post("/change-password", status_code=204)
+@router.post(
+    "/change-password",
+    status_code=204,
+    responses={
+        401: {
+            "description": "`invalid_credentials` (current password wrong); `details.attempts_left` says how many tries remain."
+        },
+        429: {
+            "description": "`password_change_locked`: 5 wrong current passwords (or key-download confirmations) for this account within 15 minutes -- refused, even with the right password, "
+            "until `details.retry_after_seconds` have passed."
+        },
+    },
+)
 def change_password(
     body: ChangePasswordRequest,
+    request: Request,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
     auth_user: AuthenticatedUser = Depends(get_session_user),
 ) -> None:
+    """Changes the signed-in account's local password (session only, not
+    with API tokens). The current password is checked first; wrong ones are
+    audited (`password_change_failed`) and limited together with key-download
+    confirmations (`auth.attempt_limit`)."""
     user = db.get(User, auth_user.user_id)
     if user is None or user.password_hash is None:
         raise ResurgamApiError(
@@ -413,8 +520,26 @@ def change_password(
             message="This account has no local password to change (break-glass and SSO accounts aren't affected).",
             status_code=400,
         )
+    attempt_limit.refuse_if_locked(
+        db, attempt_limit.SESSION_PASSWORD, code="password_change_locked", actor_user_id=user.id
+    )
     if not verify_password(body.current_password, user.password_hash):
-        raise ResurgamApiError(code="invalid_credentials", message="Current password is incorrect.", status_code=401)
+        record_login_audit_event(
+            db,
+            action="password_change_failed",
+            actor_user_id=user.id,
+            correlation_id=getattr(request.state, "correlation_id", None),
+            detail={},
+        )
+        db.commit()
+        raise _login_failed(
+            db,
+            "Current password is incorrect.",
+            "invalid_credentials",
+            attempt_limit.SESSION_PASSWORD,
+            locked_code="password_change_locked",
+            actor_user_id=user.id,
+        )
 
     user.password_hash = hash_password(body.new_password)
     db.commit()
