@@ -11,6 +11,7 @@ import {
 import type {
   EncryptionKeyImportOut,
   EncryptionKeyOut,
+  ZabbixSetupOut,
   StepUpConfirmation,
   TenantKeyDownloadPermissionOut,
   DiskMountCreatedOut,
@@ -1066,6 +1067,13 @@ export const apiTokensApi = {
   /** Every user's tokens -- platform admin only. */
   all: () => apiRequest<ApiTokenOut[]>("/api-tokens"),
   revoke: (id: string) => apiRequest<void>(`/api-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
+/** Zabbix monitoring (Administration -> Zabbix monitoring). */
+export const zabbixApi = {
+  setup: () => apiRequest<ZabbixSetupOut>("/zabbix/setup"),
+  downloadTemplate: () => downloadFile("/zabbix/template", "zabbix_template_resurgam.yaml"),
+  downloadCaCertificate: () => downloadFile("/zabbix/ca-certificate", "resurgam-appliance-ca.crt"),
 };
 
 /** Encryption key store (ADR 0031, stage 2). */

@@ -282,11 +282,74 @@ once. Platform admins see every user's tokens under Administration → Users & R
 users" and can revoke any of them. Creating, revoking and every action taken with a token are in the
 audit log; actions show as "<user> via API token <name> (rsg_…)".
 
-**Zabbix:** the Zabbix endpoints need `platform_admin`. Create a token with "platform_admin — all tenants
-(global)", read-only, limited to the Zabbix server's address, and set it as a static `Authorization`
-header in the HTTP agent items.
+**Zabbix:** see [Zabbix monitoring](#zabbix-monitoring) -- the wizard there creates a suitable token.
 
 API tokens are not part of the configuration export: create new ones on the target instance.
+
+### Zabbix monitoring
+
+RESURGAM ships a Zabbix template, **RESURGAM by HTTP** (Zabbix 7.0 or newer). Zabbix polls the
+appliance's API over HTTPS; nothing is installed on the appliance. **Administration → Zabbix monitoring**
+walks through the setup: it creates the API token, offers the template for download with this
+appliance's address already filled in, and lists every value to enter in Zabbix.
+
+**What it monitors**
+
+| What | Item(s) | Trigger(s) |
+|---|---|---|
+| API | readiness, every minute | "API is not ready" (high), "API unreachable" -- no answer for 10 min (high) |
+| Each datastore (discovered) | used %, used, available, total size, time since last measurement | "filling up" > `{$RESURGAM.DATASTORE.PUSED.WARN}` (warning), "almost full" > `{$RESURGAM.DATASTORE.PUSED.CRIT}` (high), "not measured for a while" > `{$RESURGAM.DATA.AGE.MAX}` (average) |
+| Each PBS × task type (discovered: backup, verify, prune, garbage_collection, sync) | status of the newest task, time since it started | "Last … task failed" (average), "No … task for too long" > `{$RESURGAM.JOB.AGE.MAX}` (warning) |
+
+Values come every 5 minutes (one request per topic; the per-datastore and per-job items read from it).
+Discovery runs hourly; items of datastores and job types RESURGAM no longer knows are disabled at once
+and deleted after 7 days (Zabbix's defaults).
+
+**Setup by hand** (what the wizard does):
+
+1. Create an API token (Profile → API tokens): role "platform_admin — all tenants (global)", read-only,
+   allowed addresses = the Zabbix server, expiry as long as you like up to 18 months. The Zabbix
+   endpoints need platform_admin; read-only keeps the token from changing anything.
+2. Download the template: Administration → Zabbix monitoring → step 3, or
+   `GET /api/v1/zabbix/template` with the token. The file in the repository is
+   [`backend/src/resurgam_api/monitoring/zabbix_template.yaml`](../../backend/src/resurgam_api/monitoring/zabbix_template.yaml)
+   (address macro still set to the example).
+3. In Zabbix: Data collection → Templates → Import, choose the file, keep the default rules.
+4. Data collection → Hosts → Create host (e.g. "RESURGAM", any host group, no interface needed), link
+   "RESURGAM by HTTP", and set the host macros:
+   - `{$RESURGAM.URL}`: the appliance's address as set in `RESURGAM_DOMAIN`, e.g.
+     `https://resurgam.example.com`, without a trailing slash. **Any other name or IP gets HTTP 421
+     ("wrong address") and no data.** The downloaded template already holds the right value.
+   - `{$RESURGAM.TOKEN}`: the token, type "Secret text".
+5. Monitoring → Latest data shows values within a few minutes ("Execute now" on the discovery rules
+   starts discovery at once).
+
+**Thresholds** are template macros; override them on the host. With a context they apply to one
+datastore or one task type only:
+
+| Macro | Default | Meaning |
+|---|---|---|
+| `{$RESURGAM.DATASTORE.PUSED.WARN}` | 80 | % used for "filling up"; per datastore e.g. `{$RESURGAM.DATASTORE.PUSED.WARN:"store1"}` |
+| `{$RESURGAM.DATASTORE.PUSED.CRIT}` | 90 | % used for "almost full" |
+| `{$RESURGAM.JOB.AGE.MAX}` | 93600 (26 h) | seconds since the newest task of a type started; `:"verify"` and `:"garbage_collection"` default to 691200 (8 days) |
+| `{$RESURGAM.DATA.AGE.MAX}` | 3600 | seconds without a new datastore measurement |
+| `{$RESURGAM.JOB.TYPE.NOT_MATCHES}` | `^unknown$` | task types not to discover (regular expression) |
+
+**TLS:** the template's HTTP items do not verify the appliance's certificate, so the appliance's own
+certificate (Caddy's internal CA) works as is. To verify it, add the appliance's CA certificate
+(wizard step 4, or `GET /api/v1/zabbix/ca-certificate`) to the Zabbix server's CA store and switch on
+"SSL verify peer" and "SSL verify host" on the template's HTTP items and discovery rules.
+
+**Troubleshooting** -- an item's error in Data collection → Hosts → Items tells the cause:
+
+- `401`: token wrong, revoked or expired -- create a new one and replace `{$RESURGAM.TOKEN}`.
+- `403`: the token lacks platform_admin for all tenants, or Zabbix calls from an address outside the
+  token's allowed addresses.
+- `421`: `{$RESURGAM.URL}` is not the appliance's `RESURGAM_DOMAIN`.
+- Connection refused / timeout: the Zabbix server cannot reach the appliance on port 443.
+
+**Updating the template:** import the new file the same way with "Update existing" ticked; host macros
+stay. The template's revision is shown in the wizard and in Zabbix as the template's vendor version.
 
 ### White-label branding
 

@@ -40,6 +40,7 @@ resurgam-update = "resurgam_api.updates.updater:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pyyaml>=6",
     "ruff>=0.16.10",
 ]
 

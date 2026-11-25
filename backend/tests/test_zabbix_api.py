@@ -105,6 +105,7 @@ def test_datastore_usage_returns_latest_measurement_only(client, platform_admin_
     assert entry["datastore_id"] == datastore_id
     assert entry["used_bytes"] == 500
     assert entry["usage_percent"] == 50.0
+    assert 0 <= entry["age_seconds"] < 60
 
 
 def test_datastore_usage_omits_datastores_with_no_measurement(client, platform_admin_headers, monkeypatch):
@@ -180,6 +181,98 @@ def test_zabbix_endpoints_require_platform_admin(client, db_session, test_settin
         "/api/v1/zabbix/datastores/usage",
         "/api/v1/zabbix/discovery/jobs",
         "/api/v1/zabbix/jobs/status",
+        "/api/v1/zabbix/setup",
+        "/api/v1/zabbix/template",
+        "/api/v1/zabbix/ca-certificate",
     ]:
         response = client.get(path, headers=headers)
         assert response.status_code == 403, path
+
+
+def _template(text: str) -> dict:
+    import yaml
+
+    return yaml.safe_load(text)["zabbix_export"]["templates"][0]
+
+
+def test_template_download_presets_the_appliance_address(client, platform_admin_headers, test_settings):
+    test_settings.frontend_origin = "https://resurgam.example.internal/"
+    response = client.get("/api/v1/zabbix/template", headers=platform_admin_headers)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/yaml")
+    assert "zabbix_template_resurgam.yaml" in response.headers["content-disposition"]
+    template = _template(response.text)
+    macros = {m["macro"]: m for m in template["macros"]}
+    assert macros["{$RESURGAM.URL}"]["value"] == "https://resurgam.example.internal"
+    assert macros["{$RESURGAM.TOKEN}"]["type"] == "SECRET_TEXT"
+    assert "value" not in macros["{$RESURGAM.TOKEN}"]
+
+
+def test_template_reads_only_fields_the_api_provides():
+    """Every value the template's JSONPath steps read and every LLD macro it
+    uses must exist in the API -- otherwise Zabbix silently gets nothing."""
+    import re
+
+    from resurgam_api import monitoring
+    from resurgam_api.schemas import zabbix as schemas
+
+    template = _template(monitoring.template_yaml())
+    assert template["name"] == monitoring.TEMPLATE_NAME
+    assert template["vendor"]["version"] == monitoring.TEMPLATE_REVISION
+
+    fields = {
+        "datastores": set(schemas.ZabbixDatastoreUsageValue.model_fields),
+        "jobs": set(schemas.ZabbixJobStatusValue.model_fields),
+    }
+    lld_macros = {
+        "resurgam.datastores.discovery": {f.alias for f in schemas.ZabbixDatastoreDiscoveryEntry.model_fields.values()},
+        "resurgam.jobs.discovery": {f.alias for f in schemas.ZabbixJobDiscoveryEntry.model_fields.values()},
+    }
+    checked = 0
+    for rule in template["discovery_rules"]:
+        rule_text = str(rule)
+        used = set(re.findall(r"\{#[A-Z_]+\}", rule_text))
+        assert used <= lld_macros[rule["key"]], (rule["key"], used - lld_macros[rule["key"]])
+        for prototype in rule["item_prototypes"]:
+            path = prototype["preprocessing"][0]["parameters"][0]
+            match = re.match(r"\$\.(\w+)\[\?\(.*\)\]\.(\w+)\.first\(\)$", path)
+            assert match, path
+            collection, field = match.groups()
+            assert field in fields[collection], (collection, field)
+            for key in re.findall(r"@\.(\w+)", path):
+                assert key in fields[collection], (collection, key)
+            checked += 1
+    assert checked == 7
+
+
+def test_setup_summarizes_what_zabbix_will_discover(
+    client, platform_admin_headers, db_session, monkeypatch, test_settings
+):
+    test_settings.frontend_origin = "https://resurgam.example.internal"
+    test_settings.appliance_tls_ca_file = "/nonexistent/root.crt"
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
+    _import_datastore(client, platform_admin_headers, instance_id, monkeypatch, name="store2")
+    _add_measurement(db_session, datastore_id, datetime.now(UTC), used_bytes=10)
+    now = datetime.now(UTC)
+    _add_task(db_session, instance_id, "backup", "ok", now, upid_suffix="1")
+    _add_task(db_session, instance_id, "unknown", "ok", now, upid_suffix="2")
+
+    body = client.get("/api/v1/zabbix/setup", headers=platform_admin_headers).json()
+    assert body["appliance_url"] == "https://resurgam.example.internal"
+    assert body["template_name"] == "RESURGAM by HTTP"
+    assert (body["datastores"], body["datastores_with_usage"], body["job_types"]) == (2, 1, 1)
+    assert body["ca_certificate_available"] is False
+
+
+def test_ca_certificate_download(client, platform_admin_headers, test_settings, tmp_path):
+    test_settings.appliance_tls_ca_file = str(tmp_path / "missing.crt")
+    missing = client.get("/api/v1/zabbix/ca-certificate", headers=platform_admin_headers)
+    assert (missing.status_code, missing.json()["code"]) == (404, "ca_certificate_unavailable")
+
+    pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+    (tmp_path / "root.crt").write_text(pem)
+    test_settings.appliance_tls_ca_file = str(tmp_path / "root.crt")
+    response = client.get("/api/v1/zabbix/ca-certificate", headers=platform_admin_headers)
+    assert response.status_code == 200
+    assert response.text == pem
