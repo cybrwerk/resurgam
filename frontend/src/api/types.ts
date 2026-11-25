@@ -2422,3 +2422,15 @@ export interface TenantKeyDownloadPermissionOut {
   customer_id: string;
   allowed: boolean;
 }
+
+/** GET /zabbix/setup -- what the Zabbix monitoring wizard shows. */
+export interface ZabbixSetupOut {
+  appliance_url: string;
+  template_name: string;
+  template_version: string;
+  min_zabbix_version: string;
+  ca_certificate_available: boolean;
+  datastores: number;
+  datastores_with_usage: number;
+  job_types: number;
+}

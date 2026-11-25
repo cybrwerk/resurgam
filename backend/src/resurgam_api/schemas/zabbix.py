@@ -41,13 +41,17 @@ class ZabbixDatastoreDiscoveryOut(BaseModel):
 
 class ZabbixDatastoreUsageValue(BaseModel):
     datastore_id: str = Field(description="Matches {#DATASTORE_ID} from GET /zabbix/discovery/datastores.")
-    used_bytes: int
-    available_bytes: int
-    total_bytes: int
+    used_bytes: int = Field(description="Bytes in use on the datastore, as PBS reports it.")
+    available_bytes: int = Field(description="Bytes still free on the datastore.")
+    total_bytes: int = Field(description="The datastore's total size in bytes.")
     usage_percent: float = Field(
         description="used_bytes / total_bytes * 100, rounded to 2 decimals; 0 if total_bytes is 0."
     )
     captured_at: datetime = Field(description="When the Collector last measured this datastore's usage.")
+    age_seconds: float = Field(
+        description="Seconds since `captured_at` -- grows when the Collector stops reaching PBS; the basis "
+        "for the template's 'usage not measured' trigger."
+    )
 
 
 class ZabbixDatastoreUsageOut(BaseModel):
@@ -71,8 +75,8 @@ class ZabbixJobDiscoveryEntry(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    pbs_instance_id: str = Field(alias="{#PBS_INSTANCE_ID}")
-    pbs_instance_name: str = Field(alias="{#PBS_INSTANCE_NAME}")
+    pbs_instance_id: str = Field(alias="{#PBS_INSTANCE_ID}", description="The PBS instance's UUID.")
+    pbs_instance_name: str = Field(alias="{#PBS_INSTANCE_NAME}", description="The PBS instance's display name.")
     task_type: str = Field(
         alias="{#TASK_TYPE}",
         description="backup | verify | prune | garbage_collection | sync | unknown (this app's own normalized TaskType vocabulary).",
@@ -80,6 +84,8 @@ class ZabbixJobDiscoveryEntry(BaseModel):
 
 
 class ZabbixJobDiscoveryOut(BaseModel):
+    """Zabbix's own required LLD envelope: a top-level `data` array."""
+
     data: list[ZabbixJobDiscoveryEntry]
 
 
@@ -87,7 +93,7 @@ class ZabbixJobStatusValue(BaseModel):
     pbs_instance_id: str = Field(description="Matches {#PBS_INSTANCE_ID} from GET /zabbix/discovery/jobs.")
     task_type: str = Field(description="Matches {#TASK_TYPE} from GET /zabbix/discovery/jobs.")
     status: str = Field(description="The most recent task's status: ok | error | running | unknown.")
-    last_started_at: datetime
+    last_started_at: datetime = Field(description="When the most recent task of this type started.")
     last_ended_at: datetime | None = Field(description="Null while the most recent task is still running.")
     age_seconds: float = Field(
         description="Seconds since the most recent task of this type started on this instance -- "
@@ -100,3 +106,29 @@ class ZabbixJobStatusOut(BaseModel):
     pair's most recent task -- meant as a single Zabbix master item."""
 
     jobs: list[ZabbixJobStatusValue]
+
+
+class ZabbixSetupOut(BaseModel):
+    """What the Zabbix monitoring wizard shows: the address Zabbix must use,
+    the template, and what Zabbix will discover right now."""
+
+    appliance_url: str = Field(
+        description="The address Zabbix must call -- the appliance's configured domain (RESURGAM_DOMAIN). "
+        "Any other name or IP is answered with 421 `unknown_host`. Goes into the {$RESURGAM.URL} macro."
+    )
+    template_name: str = Field(description="The template's name in Zabbix after import.")
+    template_version: str = Field(
+        description="The template's revision (its vendor version in Zabbix), to tell whether an imported copy is current."
+    )
+    min_zabbix_version: str = Field(description="The oldest Zabbix version the template imports into.")
+    ca_certificate_available: bool = Field(
+        description="Whether the appliance's own CA certificate can be downloaded (GET /zabbix/ca-certificate) -- "
+        "needed only to switch on TLS verification in Zabbix."
+    )
+    datastores: int = Field(description="Datastores Zabbix will discover.")
+    datastores_with_usage: int = Field(
+        description="Of those, how many have a usage measurement yet (the others get values after the next sync)."
+    )
+    job_types: int = Field(
+        description="(PBS instance, task type) pairs Zabbix will discover, without `unknown` (filtered by the template)."
+    )
