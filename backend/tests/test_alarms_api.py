@@ -262,3 +262,63 @@ def test_alarms_respect_customer_scope(client, platform_admin_headers, db_sessio
     alarms = response.json()
     assert len(alarms) == 1
     assert alarms[0]["entity_id"] == my_store
+
+
+def _add_growth_history(db_session, datastore_id, start_used, per_day, days=10, total_bytes=1000):
+    from datetime import UTC, datetime, timedelta
+
+    from resurgam_api.models.usage import UsageMeasurement
+
+    now = datetime.now(UTC)
+    for day in range(days):
+        used = start_used + per_day * day
+        db_session.add(
+            UsageMeasurement(
+                datastore_id=datastore_id,
+                captured_at=now - timedelta(days=days - 1 - day, minutes=5),
+                used_bytes=used,
+                available_bytes=total_bytes - used,
+                total_bytes=total_bytes,
+            )
+        )
+    db_session.commit()
+
+
+def _alarms_for(client, headers, datastore_id) -> dict[str, dict]:
+    response = client.get("/api/v1/alarms", headers=headers)
+    return {a["type"]: a for a in response.json() if a["entity_id"] == datastore_id}
+
+
+def test_full_soon_alarms_from_forecast(client, platform_admin_headers, db_session, monkeypatch):
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    soon = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch, name="soon")
+    later = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch, name="later")
+    far = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch, name="far")
+    # Latest used 590 -> 410 left. 41/day: 10 days (critical). 15/day: ~27 days (warning). 1/day: no alarm.
+    _add_growth_history(db_session, soon, start_used=590 - 9 * 41, per_day=41)
+    _add_growth_history(db_session, later, start_used=590 - 9 * 15, per_day=15)
+    _add_growth_history(db_session, far, start_used=590 - 9, per_day=1)
+
+    soon_alarms = _alarms_for(client, platform_admin_headers, soon)
+    assert set(soon_alarms) == {"datastore_full_soon_critical"}
+    assert "full in about 10 days" in soon_alarms["datastore_full_soon_critical"]["message"]
+    assert set(_alarms_for(client, platform_admin_headers, later)) == {"datastore_full_soon_warning"}
+    assert _alarms_for(client, platform_admin_headers, far) == {}
+
+
+def test_full_soon_alarm_not_raised_next_to_an_equally_severe_usage_alarm(
+    client, platform_admin_headers, db_session, monkeypatch
+):
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    critical = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch, name="crit")
+    warning = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch, name="warn")
+    # 97 % used and full in ~3 days: the usage alarm already says it.
+    _add_growth_history(db_session, critical, start_used=970 - 9 * 10, per_day=10)
+    # 85 % used (warning) but full in ~7 days (critical): both show, the forecast is more urgent.
+    _add_growth_history(db_session, warning, start_used=850 - 9 * 20, per_day=20)
+
+    assert set(_alarms_for(client, platform_admin_headers, critical)) == {"datastore_usage_critical"}
+    assert set(_alarms_for(client, platform_admin_headers, warning)) == {
+        "datastore_usage_warning",
+        "datastore_full_soon_critical",
+    }

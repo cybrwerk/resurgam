@@ -9,6 +9,12 @@ from resurgam_api.api.v1.datastores import get_datastore_assignment
 from resurgam_api.auth.scope import effective_group_customer_id
 from resurgam_api.instant_recovery import lifecycle as ir_lifecycle
 from resurgam_api.inventory.protection import evaluate_protection_status
+from resurgam_api.inventory.usage import (
+    FORECAST_CRITICAL_DAYS,
+    FORECAST_WARNING_DAYS,
+    compute_capacity_forecast,
+    load_daily_peaks,
+)
 from resurgam_api.models.datastore import Datastore
 from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot, ProtectionPolicy, ProtectionStatus
@@ -40,6 +46,12 @@ class AlarmType(str, Enum):
     PROTECTION_WARNING = "protection_warning"
     DATASTORE_USAGE_CRITICAL = "datastore_usage_critical"
     DATASTORE_USAGE_WARNING = "datastore_usage_warning"
+    # Capacity forecast: at the last 30 days' net growth the datastore is full
+    # in <= 14 / <= 30 days. Only raised when it is more severe than the
+    # usage alarm above for the same datastore, which would otherwise say
+    # the same thing twice.
+    DATASTORE_FULL_SOON_CRITICAL = "datastore_full_soon_critical"
+    DATASTORE_FULL_SOON_WARNING = "datastore_full_soon_warning"
     # Instant Recovery (ADR 0030 §6): a VM still runs from its backup after the
     # cluster's `instant_recovery_alarm_hours`; the overlay storage is 80 % full;
     # a failed Instant Recovery left a VM, overlays or mappings behind.
@@ -102,7 +114,7 @@ def _protection_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[Alar
     return alarms
 
 
-def _usage_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut]:
+def _usage_alarms(db: Session, visible: set[uuid.UUID] | None, now: datetime) -> list[AlarmOut]:
     alarms: list[AlarmOut] = []
     datastores = db.query(Datastore).all()
 
@@ -122,24 +134,64 @@ def _usage_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut]
             continue
         percent = latest.used_bytes / latest.total_bytes * 100
 
+        usage_rank = 0
         if percent >= _USAGE_CRITICAL_PERCENT:
+            usage_rank = 2
             alarm_type, severity = AlarmType.DATASTORE_USAGE_CRITICAL, AlarmSeverity.CRITICAL
         elif percent >= _USAGE_WARNING_PERCENT:
+            usage_rank = 1
             alarm_type, severity = AlarmType.DATASTORE_USAGE_WARNING, AlarmSeverity.WARNING
-        else:
+
+        if usage_rank:
+            alarms.append(
+                AlarmOut(
+                    type=alarm_type.value,
+                    severity=severity.value,
+                    customer_id=customer_id,
+                    message=f"{datastore.name}: {round(percent, 1)}% used",
+                    entity_type="datastore",
+                    entity_id=datastore.id,
+                )
+            )
+        if usage_rank == 2:
             continue
 
+        forecast = compute_capacity_forecast(load_daily_peaks(db, datastore.id, now), latest.available_bytes, now)
+        if forecast.days_until_full is None or forecast.days_until_full > FORECAST_WARNING_DAYS:
+            continue
+        if forecast.days_until_full <= FORECAST_CRITICAL_DAYS:
+            forecast_rank, alarm_type, severity = 2, AlarmType.DATASTORE_FULL_SOON_CRITICAL, AlarmSeverity.CRITICAL
+        else:
+            forecast_rank, alarm_type, severity = 1, AlarmType.DATASTORE_FULL_SOON_WARNING, AlarmSeverity.WARNING
+        if forecast_rank <= usage_rank:
+            continue
         alarms.append(
             AlarmOut(
                 type=alarm_type.value,
                 severity=severity.value,
                 customer_id=customer_id,
-                message=f"{datastore.name}: {round(percent, 1)}% used",
+                message=(
+                    f"{datastore.name}: full in about {max(round(forecast.days_until_full), 0)} days at "
+                    f"+{_format_bytes(forecast.growth_bytes_per_day or 0)}/day ({round(percent, 1)}% used)"
+                ),
                 entity_type="datastore",
                 entity_id=datastore.id,
             )
         )
     return alarms
+
+
+def _format_bytes(value: int) -> str:
+    """Same units as the frontend's `formatBytes` (1024-based, "GB"), so the
+    alarm text and the Capacity & Trends page show the same figure."""
+    size = float(abs(value))
+    units = ("B", "KB", "MB", "GB", "TB")
+    index = 0
+    while size >= 1024 and index < len(units) - 1:
+        size /= 1024
+        index += 1
+    formatted = f"{size:.0f} {units[index]}" if index == 0 else f"{size:.1f} {units[index]}"
+    return f"-{formatted}" if value < 0 else formatted
 
 
 def _instant_recovery_alarms(db: Session, visible: set[uuid.UUID] | None, now: datetime) -> list[AlarmOut]:
@@ -342,10 +394,11 @@ def compute_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut
     *effective* customer must be in `visible`, same scope rule as every
     other customer-scoped endpoint.
     """
+    now = datetime.now(UTC)
     alarms = (
         _protection_alarms(db, visible)
-        + _usage_alarms(db, visible)
-        + _instant_recovery_alarms(db, visible, datetime.now(UTC))
+        + _usage_alarms(db, visible, now)
+        + _instant_recovery_alarms(db, visible, now)
         + _encryption_alarms(db, visible)
         + _key_store_alarms(db, visible)
     )

@@ -1194,11 +1194,22 @@ export interface UsageMeasurementOut {
   last_successful_gc_at: string | null;
 }
 
+export type CapacityForecastStatus = "growing" | "not_growing" | "insufficient_history";
+
+export interface CapacityForecastOut {
+  status: CapacityForecastStatus;
+  basis_days: number;
+  growth_bytes_per_day: number | null;
+  days_until_full: number | null;
+  full_at: string | null;
+}
+
 export interface DatastoreUsageOut {
   latest: UsageMeasurementOut | null;
   history: UsageMeasurementOut[];
   daily_change_bytes: number | null;
   monthly_change_bytes: number | null;
+  forecast: CapacityForecastOut;
 }
 
 export interface BackupSnapshotOut {

@@ -335,6 +335,26 @@ and namespace, last backup and age, sortable by every column, with a search fiel
 The rule is fixed and the same as on the Backups pages: "Due soon" after 48 hours without a backup,
 "Overdue" after 30 days or when a workload was never backed up.
 
+### Capacity forecast: when is a datastore full?
+
+*Reporting → Capacity & Trends* shows two columns per datastore:
+
+- **Net growth / day**: how much used space grows per day, measured over the last 30 days. Each
+  day's highest value counts, and the figure is *net*: what prune and garbage collection freed in
+  those 30 days is already subtracted. A datastore whose backups grow but whose retention frees the
+  same amount shows about zero.
+- **Full in**: the available space of the latest measurement divided by the net growth. Hover it for
+  the date. Red at 14 days or less, amber at 30 days or less. "Not growing" when the datastore stays
+  the same or shrinks; "Not enough history" during the first 7 days after a datastore was added.
+
+The forecast assumes the datastore keeps growing as in the last 30 days. A new VM, a longer
+retention or a removed customer changes it; it settles again within a few days.
+
+Alarms: *datastore full soon* (warning at 30 days, critical at 14) shows on the Dashboard and goes
+out through the alert mailer like every other alarm. It is not raised when the usage alarm
+(80 % / 95 % used) already has the same or a higher severity, so one datastore does not report the
+same problem twice.
+
 ### Alert mailer (per tenant)
 
 Mails a tenant's alarms to the people responsible for them. Open the tenant (Administration →
@@ -608,10 +628,12 @@ Every `/pbs-instances/{id}/sync` call also captures one usage measurement per da
 
 ```bash
 curl "localhost:8000/api/v1/datastores/<datastore-id>/usage" -H "Authorization: Bearer $TOKEN"
-# -> {"latest": {...} | null, "history": [...], "daily_change_bytes": <int>|null, "monthly_change_bytes": <int>|null}
+# -> {"latest": {...} | null, "history": [...], "daily_change_bytes": <int>|null, "monthly_change_bytes": <int>|null,
+#     "forecast": {"status": "growing"|"not_growing"|"insufficient_history", "basis_days": <int>,
+#                  "growth_bytes_per_day": <int>|null, "days_until_full": <float>|null, "full_at": <datetime>|null}}
 ```
 
-`used_bytes`/`available_bytes`/`total_bytes` come from a real PBS call and reflect physical, deduplicated-and-compressed disk usage (manifest §9.3's "PBS-Datastore-Belegung"); `logical_bytes` is the sum of current snapshot sizes with no dedup applied ("logisch geschützte Datenmenge") — the gap between the two is roughly the dedup/compression ratio PBS is providing. Group/snapshot counts and `last_successful_gc_at` are computed from RESURGAM's own already-synced tables. `daily_change_bytes`/`monthly_change_bytes` are `null`, not `0`, until enough sync history has accumulated (sync is on-demand only, same limitation as everything else the Collector tracks) — this is computed from RESURGAM's own stored history, a deliberately simpler source than PBS's own richer built-in usage history, which is real but unused here (see `docs/milestone-1-pbs-pve-api-assumptions.md`).
+`used_bytes`/`available_bytes`/`total_bytes` come from a real PBS call and reflect physical, deduplicated-and-compressed disk usage (manifest §9.3's "PBS-Datastore-Belegung"); `logical_bytes` is the sum of current snapshot sizes with no dedup applied ("logisch geschützte Datenmenge") — the gap between the two is roughly the dedup/compression ratio PBS is providing. Group/snapshot counts and `last_successful_gc_at` are computed from RESURGAM's own already-synced tables. `daily_change_bytes`/`monthly_change_bytes` are `null`, not `0`, until enough sync history has accumulated; `history` holds the newest 500 measurements, the 24 h / 30 day baselines are looked up separately. `forecast` is described in *Capacity forecast* above — this is computed from RESURGAM's own stored history, a deliberately simpler source than PBS's own richer built-in usage history, which is real but unused here (see `docs/milestone-1-pbs-pve-api-assumptions.md`).
 
 ### Billing foundations (ADR 0009, not from the manifest)
 

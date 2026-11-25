@@ -95,6 +95,7 @@ function setup() {
     history: [],
     daily_change_bytes: null,
     monthly_change_bytes: null,
+    forecast: { status: "insufficient_history", basis_days: 0, growth_bytes_per_day: null, days_until_full: null, full_at: null },
   });
   vi.mocked(customersApi.list).mockResolvedValue([CUSTOMER]);
   vi.mocked(alarmsApi.list).mockResolvedValue([]);
