@@ -5,6 +5,29 @@ installed and talking to each other, finishing with the first-boot setup wizard.
 this directory documents what each piece *is*; this document is how you actually put them on one
 box by hand.
 
+**Quickest way: the PVE installer.** On a Proxmox VE node (8 or newer), as root:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/cybrwerk/resurgam/main/appliance/pve-install.sh)"
+```
+
+[`pve-install.sh`](pve-install.sh) asks for VM ID, name, storage, bridge, VLAN, DHCP or static IP
+(gateway, DNS), CPU/RAM/disk, an optional hostname for the web UI and an optional SSH user. It
+downloads the appliance image of the latest release (or `--version vX.Y.Z`), checks it against the
+release's `SHA256SUMS`, creates the VM as below (q35/OVMF, CPU `host`, virtio, guest agent,
+cloud-init), starts it and prints the setup wizard's address. It also checks nested
+virtualization (§1) and offers to switch it on (takes effect after a reboot of the node; the
+script does not reload the KVM module). If anything fails after the VM was created, the VM is
+removed again. Without questions, e.g. for automation:
+
+```sh
+RESURGAM_STORAGE=local-zfs RESURGAM_BRIDGE=vmbr1 RESURGAM_VLAN=5 \
+RESURGAM_IP=10.0.5.20/24 RESURGAM_GATEWAY=10.0.5.1 RESURGAM_DOMAIN=resurgam.example.com \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/cybrwerk/resurgam/main/appliance/pve-install.sh)" -- --yes
+```
+
+`--help` lists every variable. Then continue with §6.
+
 **Prefer not to do this by hand?** `packer/` builds a qcow2 that automates §1-§5 below entirely
 (Docker, the native workers' venv, all systemd units, pre-built images) -- import that into PVE
 and you land directly at §6. See [`packer/README.md`](packer/README.md).
