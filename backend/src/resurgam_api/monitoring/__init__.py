@@ -14,7 +14,7 @@ TEMPLATE_NAME = "RESURGAM by HTTP"
 TEMPLATE_FILENAME = "zabbix_template_resurgam.yaml"
 MIN_ZABBIX_VERSION = "7.0"
 # The template's own revision, `vendor.version` in the YAML -- bump both together.
-TEMPLATE_REVISION = "0.3-1"
+TEMPLATE_REVISION = "0.3-2"
 _URL_PLACEHOLDER = "value: 'https://resurgam.example.com'"
 
 

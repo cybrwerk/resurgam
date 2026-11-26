@@ -106,6 +106,21 @@ def test_datastore_usage_returns_latest_measurement_only(client, platform_admin_
     assert entry["used_bytes"] == 500
     assert entry["usage_percent"] == 50.0
     assert 0 <= entry["age_seconds"] < 60
+    # One hour of history: no forecast yet, sent as -1 so a trigger can resolve.
+    assert entry["growth_bytes_per_day"] is None
+    assert entry["days_until_full"] == -1.0
+
+
+def test_datastore_usage_includes_the_capacity_forecast(client, platform_admin_headers, db_session, monkeypatch):
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
+    now = datetime.now(UTC)
+    for day in range(10):
+        _add_measurement(db_session, datastore_id, now - timedelta(days=9 - day, minutes=5), used_bytes=400 + 10 * day)
+
+    entry = client.get("/api/v1/zabbix/datastores/usage", headers=platform_admin_headers).json()["datastores"][0]
+    assert entry["growth_bytes_per_day"] == 10
+    assert entry["days_until_full"] == 51.0  # 510 bytes left at 10 per day
 
 
 def test_datastore_usage_omits_datastores_with_no_measurement(client, platform_admin_headers, monkeypatch):
@@ -242,7 +257,7 @@ def test_template_reads_only_fields_the_api_provides():
             for key in re.findall(r"@\.(\w+)", path):
                 assert key in fields[collection], (collection, key)
             checked += 1
-    assert checked == 7
+    assert checked == 9
 
 
 def test_setup_summarizes_what_zabbix_will_discover(
