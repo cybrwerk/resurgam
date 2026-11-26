@@ -170,12 +170,14 @@ def test_usage_endpoint_latest_is_newest_even_with_long_history(
 def test_usage_endpoint_forecast(client, platform_admin_headers, db_session, monkeypatch):
     instance_id = _create_pbs_instance(client, platform_admin_headers)
     datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
-    now = datetime.now(UTC)
-    # Two syncs per day for 10 days, +10 bytes per day; the daily peak counts.
+    # Two syncs per day at 02:00 and 14:00 UTC on the last 10 full days, +10 bytes per day;
+    # the daily peak counts. Fixed times of day, not offsets from now: an offset like
+    # "now - 14 h" lands on the previous UTC day before 14:00 and shifts the daily peaks.
+    yesterday = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     for day in range(10):
-        for hours in (2, 14):
-            captured = now - timedelta(days=9 - day) - timedelta(hours=hours)
-            _add_measurement(db_session, datastore_id, captured, used_bytes=400 + 10 * day - hours // 14)
+        midnight = yesterday - timedelta(days=9 - day)
+        _add_measurement(db_session, datastore_id, midnight + timedelta(hours=2), used_bytes=400 + 10 * day - 1)
+        _add_measurement(db_session, datastore_id, midnight + timedelta(hours=14), used_bytes=400 + 10 * day)
 
     body = client.get(f"/api/v1/datastores/{datastore_id}/usage", headers=platform_admin_headers).json()
     forecast = body["forecast"]
