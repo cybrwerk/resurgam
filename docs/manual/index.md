@@ -298,7 +298,7 @@ appliance's address already filled in, and lists every value to enter in Zabbix.
 | What | Item(s) | Trigger(s) |
 |---|---|---|
 | API | readiness, every minute | "API is not ready" (high), "API unreachable" -- no answer for 10 min (high) |
-| Each datastore (discovered) | used %, used, available, total size, time since last measurement | "filling up" > `{$RESURGAM.DATASTORE.PUSED.WARN}` (warning), "almost full" > `{$RESURGAM.DATASTORE.PUSED.CRIT}` (high), "not measured for a while" > `{$RESURGAM.DATA.AGE.MAX}` (average) |
+| Each datastore (discovered) | used %, used, available, total size, time since last measurement, net growth per day, full in (days; -1 = no full date) | "filling up" > `{$RESURGAM.DATASTORE.PUSED.WARN}` (warning), "almost full" > `{$RESURGAM.DATASTORE.PUSED.CRIT}` (high), "will be full within weeks" <= `{$RESURGAM.DATASTORE.FULL.DAYS.WARN}` days (warning), "will be full soon" <= `{$RESURGAM.DATASTORE.FULL.DAYS.CRIT}` days (high), "not measured for a while" > `{$RESURGAM.DATA.AGE.MAX}` (average) |
 | Each PBS × task type (discovered: backup, verify, prune, garbage_collection, sync) | status of the newest task, time since it started | "Last … task failed" (average), "No … task for too long" > `{$RESURGAM.JOB.AGE.MAX}` (warning) |
 
 Values come every 5 minutes (one request per topic; the per-datastore and per-job items read from it).
@@ -331,6 +331,8 @@ datastore or one task type only:
 |---|---|---|
 | `{$RESURGAM.DATASTORE.PUSED.WARN}` | 80 | % used for "filling up"; per datastore e.g. `{$RESURGAM.DATASTORE.PUSED.WARN:"store1"}` |
 | `{$RESURGAM.DATASTORE.PUSED.CRIT}` | 90 | % used for "almost full" |
+| `{$RESURGAM.DATASTORE.FULL.DAYS.WARN}` | 30 | days until full for "will be full within weeks" (see *Capacity forecast*); per datastore as context |
+| `{$RESURGAM.DATASTORE.FULL.DAYS.CRIT}` | 14 | days until full for "will be full soon" |
 | `{$RESURGAM.JOB.AGE.MAX}` | 93600 (26 h) | seconds since the newest task of a type started; `:"verify"` and `:"garbage_collection"` default to 691200 (8 days) |
 | `{$RESURGAM.DATA.AGE.MAX}` | 3600 | seconds without a new datastore measurement |
 | `{$RESURGAM.JOB.TYPE.NOT_MATCHES}` | `^unknown$` | task types not to discover (regular expression) |

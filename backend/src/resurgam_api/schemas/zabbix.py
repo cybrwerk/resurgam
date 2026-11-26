@@ -52,6 +52,15 @@ class ZabbixDatastoreUsageValue(BaseModel):
         description="Seconds since `captured_at` -- grows when the Collector stops reaching PBS; the basis "
         "for the template's 'usage not measured' trigger."
     )
+    growth_bytes_per_day: int | None = Field(
+        description="Net growth of used bytes per day over the last 30 days, after prune and garbage collection "
+        "(same figure as the Capacity & Trends page); null during the first 7 days of history."
+    )
+    days_until_full: float = Field(
+        description="Days until the datastore is full at `growth_bytes_per_day`. -1 when there is no full date "
+        "(not growing, or fewer than 7 days of history) -- a number either way, so a Zabbix trigger resolves "
+        "when growth stops. The template's 'full in' triggers fire between 0 and their threshold."
+    )
 
 
 class ZabbixDatastoreUsageOut(BaseModel):
