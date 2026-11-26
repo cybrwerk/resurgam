@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC
 
 
@@ -41,7 +42,7 @@ def _fresh_secret_ref(db_session):
     from resurgam_api.models.secrets import SecretPurpose, SecretReference
 
     ref = SecretReference(
-        reference_key=f"test-{id(object())}", description="test", purpose=SecretPurpose.INFRA_CREDENTIAL
+        reference_key=f"test-{uuid.uuid4()}", description="test", purpose=SecretPurpose.INFRA_CREDENTIAL
     )
     db_session.add(ref)
     db_session.flush()
@@ -104,7 +105,6 @@ def test_member_flags_backup_group_superseded_after_a_split(client, platform_adm
 
 
 def test_create_application_group_unknown_customer_returns_400(client, platform_admin_headers):
-    import uuid
 
     response = client.post(
         "/api/v1/application-groups",
@@ -172,7 +172,7 @@ def _give_member_run_history(db_session, app_group_id, member_id, backup_group_i
     from resurgam_api.models.secrets import SecretPurpose, SecretReference
 
     ref = SecretReference(
-        reference_key=f"test-{id(object())}", description="test", purpose=SecretPurpose.INFRA_CREDENTIAL
+        reference_key=f"test-{uuid.uuid4()}", description="test", purpose=SecretPurpose.INFRA_CREDENTIAL
     )
     db_session.add(ref)
     db_session.flush()
