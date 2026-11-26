@@ -47,7 +47,11 @@ The full product specification lives in [`Backup-Center-Appliance-Manifest.md`](
 ## Get started
 
 1. Read the [beta notes](./docs/BETA.md).
-2. Deploy the appliance: [`appliance/DEPLOY.md`](./appliance/DEPLOY.md). Release images and update bundles are on the [Releases page](https://github.com/cybrwerk/resurgam/releases).
+2. Install the appliance. On a Proxmox VE node (8 or newer), as root:
+   ```sh
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/cybrwerk/resurgam/main/appliance/pve-install.sh)"
+   ```
+   It asks for VM ID, storage, bridge, VLAN, IP and so on, downloads the latest appliance image, checks it and creates the VM. Other ways to install: [`appliance/DEPLOY.md`](./appliance/DEPLOY.md). Release images and update bundles are on the [Releases page](https://github.com/cybrwerk/resurgam/releases).
 3. Connect your first PBS in the setup wizard, then follow the [operator manual](./docs/manual/index.md).
 
 Questions go to [Discussions](https://github.com/cybrwerk/resurgam/discussions), bugs to [Issues](https://github.com/cybrwerk/resurgam/issues/new/choose), and security problems to [private vulnerability reporting](./SECURITY.md). Contributions are welcome, see [CONTRIBUTING.md](./CONTRIBUTING.md).
