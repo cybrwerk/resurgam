@@ -13,6 +13,17 @@
 > [!IMPORTANT]
 > **RESURGAM is in public beta.** It runs against real PBS/PVE environments but is still young: expect rough edges and changes between releases, and run it next to your existing monitoring rather than as your only safety net. Read the [beta notes](./docs/BETA.md) (tested versions, known limitations, how to give feedback) before deploying.
 
+## Quick install
+
+Run this as root in the shell of a Proxmox VE node (PVE 8 or newer):
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/cybrwerk/resurgam/main/appliance/pve-install.sh)"
+```
+
+> [!TIP]
+> The installer asks for the VM ID, storage, network bridge, VLAN and IP address (DHCP or static). It then downloads the latest release image, checks its checksum and creates and starts the appliance VM. When it finishes it shows the address of the setup wizard. To install without questions, set `RESURGAM_*` variables and add `--yes`; see [`appliance/DEPLOY.md`](./appliance/DEPLOY.md). Always read a script before you run it as root: [`appliance/pve-install.sh`](./appliance/pve-install.sh).
+
 RESURGAM Backup Center is a multi-tenant management, monitoring, reporting, and restore control plane for multiple Proxmox Backup Server (PBS) and Proxmox VE (PVE) systems. It does not replace PBS or PVE — they remain the systems of record for backups and restores; RESURGAM adds inventory, cross-instance visibility, policy enforcement, guided/orchestrated restore, and recovery verification on top.
 
 RESURGAM is an independent open-source project and is not affiliated with or endorsed by Proxmox.
@@ -47,11 +58,7 @@ The full product specification lives in [`Backup-Center-Appliance-Manifest.md`](
 ## Get started
 
 1. Read the [beta notes](./docs/BETA.md).
-2. Install the appliance. On a Proxmox VE node (8 or newer), as root:
-   ```sh
-   bash -c "$(curl -fsSL https://raw.githubusercontent.com/cybrwerk/resurgam/main/appliance/pve-install.sh)"
-   ```
-   It asks for VM ID, storage, bridge, VLAN, IP and so on, downloads the latest appliance image, checks it and creates the VM. Other ways to install: [`appliance/DEPLOY.md`](./appliance/DEPLOY.md). Release images and update bundles are on the [Releases page](https://github.com/cybrwerk/resurgam/releases).
+2. Install the appliance with the [one-line installer](#quick-install) on a Proxmox VE node. Other ways to install: [`appliance/DEPLOY.md`](./appliance/DEPLOY.md). Release images and update bundles are on the [Releases page](https://github.com/cybrwerk/resurgam/releases).
 3. Connect your first PBS in the setup wizard, then follow the [operator manual](./docs/manual/index.md).
 
 Questions go to [Discussions](https://github.com/cybrwerk/resurgam/discussions), bugs to [Issues](https://github.com/cybrwerk/resurgam/issues/new/choose), and security problems to [private vulnerability reporting](./SECURITY.md). Contributions are welcome, see [CONTRIBUTING.md](./CONTRIBUTING.md).
