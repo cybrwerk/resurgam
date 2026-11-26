@@ -1,3 +1,5 @@
+import uuid
+
 """EPIC 9 (manifest §11.2) tests: four-eyes approval and PVE-API restore
 execution/polling. The underlying PVE write calls (`start_vm_restore`,
 `get_task_status`, etc.) are mocked at the `api.v1.restore_execution`
@@ -104,7 +106,7 @@ def _create_customer_scoped_user(db_session, test_settings, customer_id, role_ke
     from resurgam_api.auth.sessions import create_session_token
     from resurgam_api.models.identity import Role, RoleKey, ScopeType, User, UserRoleAssignment
 
-    user = User(email=f"user-{role_key}-{customer_id}-{id(object())}@example.com", display_name="Scoped User")
+    user = User(email=f"user-{role_key}-{customer_id}-{uuid.uuid4()}@example.com", display_name="Scoped User")
     db_session.add(user)
     db_session.flush()
 
