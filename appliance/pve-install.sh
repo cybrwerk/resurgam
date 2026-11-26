@@ -31,7 +31,7 @@ BRIDGE="${RESURGAM_BRIDGE:-vmbr0}"
 VLAN="${RESURGAM_VLAN:-}"
 IP="${RESURGAM_IP:-dhcp}"             # "dhcp" or CIDR, e.g. 192.168.10.20/24
 GATEWAY="${RESURGAM_GATEWAY:-}"
-DNS="${RESURGAM_DNS:-}"               # space-separated
+DNS="${RESURGAM_DNS:-}"               # space-separated; static IP only
 SEARCHDOMAIN="${RESURGAM_SEARCHDOMAIN:-}"
 DOMAIN="${RESURGAM_DOMAIN:-}"         # hostname the UI is served under; empty = the VM's IP
 CI_USER="${RESURGAM_CI_USER:-}"       # optional shell user (cloud-init)
@@ -144,16 +144,42 @@ It takes effect after a reboot of this node (or reloading ${module} with no VM r
 }
 
 # --- Choices ----------------------------------------------------------------
-list_storages() { # name type free-GiB, for storages that hold VM disks
-  pvesm status -content images 2>/dev/null | awk 'NR>1 && $3=="active" {printf "%s %s %.0f\n", $1, $2, $6/1048576}'
+list_storages() { # name type free-GiB, for storages that can hold new VM disks
+  # iSCSI storages only expose existing LUNs, they cannot get new disks.
+  pvesm status -content images 2>/dev/null \
+    | awk 'NR>1 && $3=="active" && $2!="iscsi" && $2!="iscsidirect" && $4>0 {printf "%s %s %.0f\n", $1, $2, $6/1048576}'
 }
-list_bridges() {
-  # Every Linux bridge (vmbrX, SDN VNets) except PVE's own per-VM firewall
-  # bridges (fwbr*) and Docker's.
-  local dev
-  for dev in /sys/class/net/*; do
-    [ -d "$dev/bridge" ] && basename "$dev"
-  done | grep -vE '^(fwbr|docker|br-)' || true
+
+list_bridges() { # name description, one per line
+  # PVE's own view: Linux bridges, OVS bridges and SDN VNets of this node --
+  # not internal ones like fwbr*/vrfbr_* or Docker's.
+  if command -v python3 >/dev/null 2>&1; then
+    pvesh get "/nodes/$(hostname)/network" --type any_bridge --output-format json 2>/dev/null \
+      | python3 -c '
+import json, subprocess, sys
+try:
+    vnets = {v["vnet"]: v for v in json.loads(subprocess.run(
+        ["pvesh", "get", "/cluster/sdn/vnets", "--output-format", "json"],
+        capture_output=True, text=True).stdout or "[]")}
+except Exception:
+    vnets = {}
+for i in sorted(json.load(sys.stdin), key=lambda i: i["iface"]):
+    name = i["iface"]
+    if i.get("type") == "vnet":
+        v = vnets.get(name, {})
+        desc = "SDN VNet" + (" " + v["alias"] if v.get("alias") else "") + (", zone " + v["zone"] if v.get("zone") else "")
+    else:
+        desc = {"OVSBridge": "OVS bridge", "bridge": "Linux bridge"}.get(i.get("type"), i.get("type") or "bridge")
+        if i.get("cidr"):
+            desc += ", " + i["cidr"]
+    print(name, desc)
+'
+  else
+    local dev
+    for dev in /sys/class/net/*; do
+      [ -d "$dev/bridge" ] && echo "$(basename "$dev") bridge"
+    done | grep -vE '^(fwbr|vrfbr|docker|br-)' || true
+  fi
 }
 
 pick_storage() {
@@ -175,15 +201,16 @@ pick_storage() {
 }
 
 pick_bridge() {
-  local bridges
-  bridges=$(list_bridges)
-  [ -n "$bridges" ] || die "No network bridge (vmbrX) found."
-  echo "$bridges" | grep -qx "$BRIDGE" || BRIDGE=$(echo "$bridges" | head -n1)
+  local rows
+  rows=$(list_bridges)
+  [ -n "$rows" ] || die "No network bridge or SDN VNet found."
+  echo "$rows" | awk -v b="$BRIDGE" '$1==b{f=1} END{exit !f}' || BRIDGE=$(echo "$rows" | awk 'NR==1{print $1}')
   if [ "$INTERACTIVE" = 1 ]; then
-    local args=() b
-    while read -r b; do args+=("$b" "$(ip -br -4 addr show "$b" 2>/dev/null | awk '{print $3}')"); done <<<"$bridges"
-    BRIDGE=$(ask_menu "Network bridge:" "$BRIDGE" "${args[@]}") || cancelled
+    local args=() name desc
+    while read -r name desc; do args+=("$name" "$desc"); done <<<"$rows"
+    BRIDGE=$(ask_menu "Network bridge or SDN VNet:" "$BRIDGE" "${args[@]}") || cancelled
   fi
+  echo "$rows" | awk -v b="$BRIDGE" '$1==b{f=1} END{exit !f}' || die "Bridge '$BRIDGE' not found on this node."
 }
 
 valid_cidr() { [[ $1 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]; }
@@ -255,6 +282,10 @@ validate() {
   [[ $DISK_GB =~ ^[0-9]+$ ]] && [ "$DISK_GB" -ge 20 ] || die "Disk must be at least 20 GiB."
   [ -z "$VLAN" ] || { [[ $VLAN =~ ^[0-9]+$ ]] && [ "$VLAN" -ge 1 ] && [ "$VLAN" -le 4094 ]; } \
     || die "VLAN tag '$VLAN' must be 1-4094."
+  if [ "$IP" = dhcp ] && { [ -n "$DNS" ] || [ -n "$SEARCHDOMAIN" ]; }; then
+    warn "DNS server and search domain only apply with a static IP; with DHCP the DHCP server's are used."
+    DNS=""; SEARCHDOMAIN=""
+  fi
   if [ "$IP" != dhcp ]; then
     valid_cidr "$IP" || die "IP '$IP' must be dhcp or an address with prefix, e.g. 192.168.10.20/24."
     valid_ip "$GATEWAY" || die "A static IP needs a gateway (RESURGAM_GATEWAY)."
@@ -264,7 +295,6 @@ validate() {
     [[ $CI_USER =~ ^[a-z_][a-z0-9_-]*$ ]] || die "User name '$CI_USER' is not valid."
     [ -s "$SSH_KEY_FILE" ] || die "A shell user needs an SSH public key file (RESURGAM_SSH_KEY_FILE)."
   fi
-  ip link show "$BRIDGE" >/dev/null 2>&1 || die "Bridge '$BRIDGE' not found."
 }
 
 summary() {
@@ -358,7 +388,7 @@ create_vm() {
   # Whatever fails from here on leaves a half-made VM: remove it again.
   trap remove_half_created_vm EXIT
 
-  qm set "$VMID" --efidisk0 "${STORAGE}:1,efitype=4m,pre-enrolled-keys=0" >/dev/null
+  qm set "$VMID" --efidisk0 "${STORAGE}:1,efitype=4m,pre-enrolled-keys=1" >/dev/null
   info "Importing the disk into ${STORAGE}"
   qm set "$VMID" --scsi0 "${STORAGE}:0,import-from=${IMAGE},discard=on,iothread=1,ssd=1" >/dev/null
   qm resize "$VMID" scsi0 "${DISK_GB}G" >/dev/null
@@ -367,8 +397,12 @@ create_vm() {
   # cloud-init: hostname, network, optional user. The image itself has no
   # login at all (packer/README.md).
   qm set "$VMID" --ide2 "${STORAGE}:cloudinit" --ipconfig0 "$ipcfg" >/dev/null
-  [ -z "$DNS" ] || qm set "$VMID" --nameserver "$DNS" >/dev/null
-  [ -z "$SEARCHDOMAIN" ] || qm set "$VMID" --searchdomain "$SEARCHDOMAIN" >/dev/null
+  # DNS/search domain: PVE's cloud-init only applies them with a static IP;
+  # with DHCP the DHCP server's settings are used.
+  if [ "$IP" != dhcp ]; then
+    [ -z "$DNS" ] || qm set "$VMID" --nameserver "$DNS" >/dev/null
+    [ -z "$SEARCHDOMAIN" ] || qm set "$VMID" --searchdomain "$SEARCHDOMAIN" >/dev/null
+  fi
   if [ -n "$CI_USER" ]; then
     qm set "$VMID" --ciuser "$CI_USER" --sshkeys "$SSH_KEY_FILE" >/dev/null
   fi
@@ -385,11 +419,12 @@ guest_exec() { # command... -> stdout of the command in the VM (needs the guest 
 wait_for_appliance() {
   info "Starting VM ${VMID} and waiting for first boot (a few minutes)"
   qm start "$VMID"
-  local addr=""
+  local addr="" ready=""
   for _ in $(seq 1 90); do
     if qm agent "$VMID" ping >/dev/null 2>&1; then
-      # first-boot.sh writes .env once Docker and the workers are up.
-      if [ "$(guest_exec sh -c 'test -f /opt/resurgam/appliance/.env && echo yes')" = yes ]; then
+      # first-boot.sh writes this log as its very last step (after Docker
+      # and the workers are started) -- .env alone exists earlier.
+      if [ "$(guest_exec sh -c 'test -f /etc/resurgam-first-boot.log && echo yes')" = yes ]; then
         addr=$(guest_exec sh -c "hostname -I | awk '{print \$1}'" | head -n1)
         break
       fi
@@ -400,6 +435,14 @@ wait_for_appliance() {
     warn "The appliance did not report back within 7 minutes. Check the VM's console in the PVE web UI."
     return
   fi
+  # Then the API itself: the containers need a little longer after that.
+  for _ in $(seq 1 36); do
+    ready=$(guest_exec sh -c "curl -sk -m 5 https://${addr}/api/v1/readiness" || true)
+    case "$ready" in *status*ready*) break ;; esac  # agent output escapes the quotes
+    ready=""
+    sleep 5
+  done
+  [ -n "$ready" ] || warn "The web UI did not answer yet -- give it a minute, then open https://${addr}/."
   ok "First boot done, IP ${addr}"
   if [ -n "$DOMAIN" ]; then
     info "Setting the web UI address to ${DOMAIN}"
