@@ -8,6 +8,8 @@ class AlarmOut(BaseModel):
         description=(
             "What is wrong: `protection_critical` / `protection_warning` (a backup group is overdue), "
             "`datastore_usage_critical` / `datastore_usage_warning` (datastore >= 95 % / 80 % full), "
+            "`datastore_full_soon_critical` / `datastore_full_soon_warning` (at the last 30 days' net growth the "
+            "datastore is full in <= 14 / <= 30 days; only raised when more severe than the usage alarm), "
             "`instant_recovery_running_long` (a VM runs from its backup longer than the cluster's alarm hours), "
             "`instant_recovery_overlay_storage` (the overlay storage of a VM running from its backup is >= 80 % full), "
             "`instant_recovery_failed` (a failed Instant Recovery left its VM or backup mapping behind), "

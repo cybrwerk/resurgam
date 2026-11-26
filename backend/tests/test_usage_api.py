@@ -127,3 +127,72 @@ def test_usage_endpoint_respects_customer_scope(client, platform_admin_headers, 
 
     other_response = client.get(f"/api/v1/datastores/{other_datastore_id}/usage", headers=viewer_headers)
     assert other_response.status_code == 404  # not 403 — out of scope, must not confirm existence
+
+
+def test_usage_endpoint_latest_is_newest_even_with_long_history(
+    client, platform_admin_headers, db_session, monkeypatch
+):
+    # 600 rows (more than the 500-row history cap): `latest` must be the newest one, and
+    # the 30-day baseline must still be found although it is outside the returned history.
+    from resurgam_api.models.usage import UsageMeasurement
+
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
+    now = datetime.now(UTC)
+    db_session.add(
+        UsageMeasurement(
+            datastore_id=datastore_id,
+            captured_at=now - timedelta(days=31),
+            used_bytes=100,
+            available_bytes=900,
+            total_bytes=1000,
+        )
+    )
+    for i in range(600):
+        db_session.add(
+            UsageMeasurement(
+                datastore_id=datastore_id,
+                captured_at=now - timedelta(minutes=15 * (600 - i)),
+                used_bytes=200 + i,
+                available_bytes=800 - i,
+                total_bytes=1000,
+            )
+        )
+    db_session.commit()
+
+    body = client.get(f"/api/v1/datastores/{datastore_id}/usage", headers=platform_admin_headers).json()
+    assert body["latest"]["used_bytes"] == 799
+    assert len(body["history"]) == 500
+    assert body["history"][-1]["used_bytes"] == 799
+    assert body["monthly_change_bytes"] == 699
+
+
+def test_usage_endpoint_forecast(client, platform_admin_headers, db_session, monkeypatch):
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
+    now = datetime.now(UTC)
+    # Two syncs per day for 10 days, +10 bytes per day; the daily peak counts.
+    for day in range(10):
+        for hours in (2, 14):
+            captured = now - timedelta(days=9 - day) - timedelta(hours=hours)
+            _add_measurement(db_session, datastore_id, captured, used_bytes=400 + 10 * day - hours // 14)
+
+    body = client.get(f"/api/v1/datastores/{datastore_id}/usage", headers=platform_admin_headers).json()
+    forecast = body["forecast"]
+    assert forecast["status"] == "growing"
+    assert forecast["growth_bytes_per_day"] == 10
+    # latest: used 490 of 1000 -> 510 bytes available at 10 per day.
+    assert forecast["days_until_full"] == 51.0
+
+
+def test_usage_endpoint_forecast_without_history(client, platform_admin_headers, monkeypatch):
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
+    body = client.get(f"/api/v1/datastores/{datastore_id}/usage", headers=platform_admin_headers).json()
+    assert body["forecast"] == {
+        "status": "insufficient_history",
+        "basis_days": 0,
+        "growth_bytes_per_day": None,
+        "days_until_full": None,
+        "full_at": None,
+    }

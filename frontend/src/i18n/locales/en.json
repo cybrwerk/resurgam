@@ -1116,7 +1116,16 @@
     "snapshots": "Snapshots",
     "dailyChange": "24h change",
     "monthlyChange": "30d change",
-    "lastGc": "Last garbage collection"
+    "lastGc": "Last garbage collection",
+    "growthPerDay": "Net growth / day",
+    "fullIn": "Full in",
+    "fullInDays": "{{count}} days",
+    "fullInDays_one": "{{count}} day",
+    "fullInOverYear": "> 1 year",
+    "fullNow": "Full",
+    "notGrowing": "Not growing",
+    "insufficientHistory": "Not enough history ({{count}}/7 days)",
+    "forecastHint": "Net growth over the last {{days}} days (after prune and garbage collection), full around {{date}}"
   },
   "pricingPlans": {
     "title": "Pricing Plans",

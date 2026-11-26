@@ -2,7 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { customersApi, datastoresApi } from "../api/resources";
-import type { DatastoreOut, DatastoreUsageOut } from "../api/types";
+import type { CapacityForecastOut, DatastoreOut, DatastoreUsageOut } from "../api/types";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PageHeader } from "../components/PageHeader";
 import { QueryState } from "../components/QueryState";
@@ -21,6 +21,14 @@ function formatChange(bytes: number | null): string {
   return `${sign}${formatBytes(bytes)}`;
 }
 
+// Same thresholds as the backend's `datastore_full_soon_*` alarms
+// (inventory/usage.py FORECAST_CRITICAL_DAYS / FORECAST_WARNING_DAYS).
+function fullInTone(days: number): StatusTone {
+  if (days <= 14) return "danger";
+  if (days <= 30) return "warning";
+  return "ok";
+}
+
 interface Row {
   datastore: DatastoreOut;
   usage: DatastoreUsageOut | undefined;
@@ -29,6 +37,32 @@ interface Row {
 
 export function CapacityTrendsPage() {
   const { t } = useTranslation();
+
+  const renderFullIn = (forecast: CapacityForecastOut | undefined) => {
+    if (!forecast) return "—";
+    if (forecast.status === "insufficient_history") {
+      return <span className="mutedText">{t("capacityTrends.insufficientHistory", { count: forecast.basis_days })}</span>;
+    }
+    if (forecast.status === "not_growing" || forecast.days_until_full === null) {
+      return <span className="mutedText">{t("capacityTrends.notGrowing")}</span>;
+    }
+    const days = forecast.days_until_full;
+    const label =
+      days < 1
+        ? t("capacityTrends.fullNow")
+        : days > 365
+          ? t("capacityTrends.fullInOverYear")
+          : t("capacityTrends.fullInDays", { count: Math.round(days) });
+    const hint = t("capacityTrends.forecastHint", {
+      days: forecast.basis_days,
+      date: forecast.full_at ? new Date(forecast.full_at).toLocaleDateString() : "—",
+    });
+    return (
+      <span title={hint}>
+        <StatusBadge tone={fullInTone(days)} label={label} />
+      </span>
+    );
+  };
 
   const datastoresQuery = useQuery({ queryKey: ["datastores"], queryFn: datastoresApi.list });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: customersApi.list });
@@ -102,6 +136,16 @@ export function CapacityTrendsPage() {
       key: "monthlyChange",
       header: t("capacityTrends.monthlyChange"),
       render: (row) => formatChange(row.usage?.monthly_change_bytes ?? null),
+    },
+    {
+      key: "growthPerDay",
+      header: t("capacityTrends.growthPerDay"),
+      render: (row) => formatChange(row.usage?.forecast.growth_bytes_per_day ?? null),
+    },
+    {
+      key: "fullIn",
+      header: t("capacityTrends.fullIn"),
+      render: (row) => (row.isLoading ? "…" : renderFullIn(row.usage?.forecast)),
     },
     {
       key: "lastGc",

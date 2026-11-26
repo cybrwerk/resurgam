@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func
@@ -14,7 +14,7 @@ from resurgam_api.db import get_db
 from resurgam_api.errors import ResurgamApiError
 from resurgam_api.inventory.file_index_defaults import default_file_index_exclude_patterns
 from resurgam_api.inventory.protection import evaluate_protection_status
-from resurgam_api.inventory.usage import compute_usage_changes
+from resurgam_api.inventory.usage import compute_capacity_forecast, compute_usage_changes, load_daily_peaks
 from resurgam_api.models.audit import AuditEvent
 from resurgam_api.models.datastore import Datastore
 from resurgam_api.models.identity import RoleKey
@@ -35,7 +35,7 @@ from resurgam_api.schemas.inventory import (
     TaskRunOut,
 )
 from resurgam_api.schemas.protection_policy import AssignProtectionPolicyRequest
-from resurgam_api.schemas.usage import DatastoreUsageOut, UsageMeasurementOut
+from resurgam_api.schemas.usage import CapacityForecastOut, DatastoreUsageOut, UsageMeasurementOut
 
 router = APIRouter(tags=["inventory"])
 
@@ -560,18 +560,51 @@ def get_datastore_usage(
     """
     get_datastore_in_scope_or_404(db, datastore_id, user)
 
-    history = (
-        db.query(UsageMeasurement)
-        .filter_by(datastore_id=datastore_id)
-        .order_by(UsageMeasurement.captured_at)
-        .limit(500)
-        .all()
+    now = datetime.now(UTC)
+    # Newest 500, not oldest 500: at a 15-minute sync cadence 500 rows are
+    # about five days, and ascending-then-limit froze `latest` there.
+    history = list(
+        reversed(
+            db.query(UsageMeasurement)
+            .filter_by(datastore_id=datastore_id)
+            .order_by(UsageMeasurement.captured_at.desc())
+            .limit(500)
+            .all()
+        )
     )
-    daily_change, monthly_change = compute_usage_changes(history, datetime.now(UTC))
+    latest = history[-1] if history else None
+
+    # The 24 h / 30 d baselines are looked up on their own -- the 500 rows
+    # above rarely reach back 30 days.
+    def closest_before(cutoff: datetime) -> UsageMeasurement | None:
+        return (
+            db.query(UsageMeasurement)
+            .filter(UsageMeasurement.datastore_id == datastore_id, UsageMeasurement.captured_at <= cutoff)
+            .order_by(UsageMeasurement.captured_at.desc())
+            .first()
+        )
+
+    points: list[UsageMeasurement] = []
+    if latest is not None:
+        baselines = {closest_before(now - timedelta(days=30)), closest_before(now - timedelta(hours=24))}
+        points = sorted((b for b in baselines if b is not None and b.id != latest.id), key=lambda m: m.captured_at)
+        points.append(latest)
+    daily_change, monthly_change = compute_usage_changes(points, now)
+
+    forecast = compute_capacity_forecast(
+        load_daily_peaks(db, datastore_id, now), latest.available_bytes if latest else None, now
+    )
 
     return DatastoreUsageOut(
-        latest=to_usage_measurement_out(history[-1]) if history else None,
+        latest=to_usage_measurement_out(latest) if latest else None,
         history=[to_usage_measurement_out(m) for m in history],
         daily_change_bytes=daily_change,
         monthly_change_bytes=monthly_change,
+        forecast=CapacityForecastOut(
+            status=forecast.status.value,
+            basis_days=forecast.basis_days,
+            growth_bytes_per_day=forecast.growth_bytes_per_day,
+            days_until_full=forecast.days_until_full,
+            full_at=forecast.full_at,
+        ),
     )
