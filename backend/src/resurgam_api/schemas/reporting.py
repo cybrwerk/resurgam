@@ -229,17 +229,47 @@ class OffsiteStatusEntryOut(BaseModel):
     backup_group_id: UUID = Field(description="The workload (VM/CT) this offsite-status entry reports on.")
     workload_label: str = Field(description="Human-readable identifier for the workload, e.g. 'web-01 (104)'.")
     has_offsite_copy: bool = Field(
-        description="Whether this workload has a copy of its backup data stored offsite, by any method."
+        description="Whether an offsite copy of this workload's backups exists (on another PBS, or on a datastore "
+        "with role 'offsite'), whether current or behind -- see `status` and `lag_hours`."
     )
-    offsite_method: Literal["datastore_role", "sync_job", "none"] = Field(
-        description="How the offsite copy is achieved: the workload's datastore is itself marked 'offsite', a PBS sync job replicates it there, or (when has_offsite_copy is false) there is none."
+    offsite_method: Literal["datastore_role", "sync_job", "exception", "none"] = Field(
+        description="How the offsite copy is achieved: a PBS sync job copies it ('sync_job'), an operator accepted "
+        "the gap with a reason ('exception', see `exception_reason`), or none. 'datastore_role' only appears in "
+        "reports generated before RESURGAM 0.3.2."
     )
     sync_schedule: str | None = Field(
-        description="The sync job's schedule string, only set when offsite_method is 'sync_job'."
+        default=None, description="Not filled any more (kept for reports generated before RESURGAM 0.3.2)."
     )
     last_synced_at: datetime | None = Field(
-        description="When the sync job last ran, only set when offsite_method is 'sync_job'."
+        default=None, description="Not filled any more (kept for reports generated before RESURGAM 0.3.2)."
     )
+    status: (
+        Literal[
+            "ok",
+            "lagging",
+            "missing",
+            "local_copy_only",
+            "target_not_connected",
+            "no_copy_job",
+            "excepted",
+            "not_required",
+        ]
+        | None
+    ) = Field(
+        default=None,
+        description="Offsite status at report time, as on the 3-2-1 Gaps page (see GET /backup-gaps `status`). "
+        "Null in reports generated before RESURGAM 0.3.2.",
+    )
+    copy_location: str | None = Field(default=None, description="Where the copy is or should be (PBS / datastore).")
+    latest_copy_at: datetime | None = Field(default=None, description="Newest snapshot of the offsite copy.")
+    lag_hours: float | None = Field(
+        default=None, description="Age in hours of the oldest snapshot not copied yet; 0 = fully copied."
+    )
+    exception_reason: str | None = Field(
+        default=None, description="Why an operator accepted this workload's offsite gap (status 'excepted')."
+    )
+    exception_by: str | None = Field(default=None, description="Who recorded that exception.")
+    exception_at: datetime | None = Field(default=None, description="When the exception was recorded.")
 
 
 class ThreeTwoOneOneZeroOut(BaseModel):

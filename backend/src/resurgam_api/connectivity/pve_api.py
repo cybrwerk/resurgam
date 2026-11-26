@@ -3,6 +3,7 @@ from urllib.parse import quote
 from resurgam_api.connectivity._http import request_json
 from resurgam_api.connectivity.models import (
     GuestListResult,
+    JobIncludedGuestsResult,
     NodeListResult,
     PermissionsResult,
     PoolListResult,
@@ -15,6 +16,8 @@ from resurgam_api.connectivity.models import (
     RemoteStorage,
     StorageListResult,
     TrustConfig,
+    UnprotectedGuest,
+    UnprotectedGuestListResult,
     VmidAvailabilityResult,
     VzdumpJob,
     VzdumpJobListResult,
@@ -26,6 +29,7 @@ STORAGE_CONFIG_PATH = "/api2/json/storage"
 CLUSTER_RESOURCES_PATH = "/api2/json/cluster/resources"
 CLUSTER_NEXTID_PATH = "/api2/json/cluster/nextid"
 CLUSTER_BACKUP_PATH = "/api2/json/cluster/backup"
+NOT_BACKED_UP_PATH = "/api2/json/cluster/backup-info/not-backed-up"
 ACCESS_PERMISSIONS_PATH = "/api2/json/access/permissions"
 
 
@@ -309,6 +313,48 @@ def list_vzdump_jobs(host: str, port: int, trust: TrustConfig, token: str, timeo
         return VzdumpJobListResult(reachable=False, error=f"unexpected response shape: {exc}")
 
     return VzdumpJobListResult(reachable=True, jobs=jobs)
+
+
+def list_not_backed_up_guests(
+    host: str, port: int, trust: TrustConfig, token: str, timeout: float = 5.0
+) -> UnprotectedGuestListResult:
+    """`GET /cluster/backup-info/not-backed-up` -- every guest no vzdump job
+    covers (ADR 0032). PVE counts *disabled* jobs as coverage and silently
+    leaves out guests the token lacks `VM.Audit` on (pve-manager
+    `PVE/API2/Cluster/BackupInfo.pm`), so this is not the whole picture on
+    its own -- see `list_job_included_vmids`.
+    """
+    data, error = _get_data(host, port, trust, token, NOT_BACKED_UP_PATH, timeout)
+    if error is not None:
+        return UnprotectedGuestListResult(reachable=False, error=error)
+    try:
+        guests = [
+            UnprotectedGuest(vmid=int(entry["vmid"]), guest_type=entry["type"], name=entry.get("name"))
+            for entry in data
+        ]
+    except (TypeError, KeyError, ValueError) as exc:
+        return UnprotectedGuestListResult(reachable=False, error=f"unexpected response shape: {exc}")
+    return UnprotectedGuestListResult(reachable=True, guests=guests)
+
+
+def list_job_included_vmids(
+    host: str, port: int, trust: TrustConfig, token: str, timeout: float, *, job_id: str
+) -> JobIncludedGuestsResult:
+    """`GET /cluster/backup/{id}/included_volumes` -- the guests a vzdump job
+    covers (PVE resolves `all`, pools and `exclude` itself). The response is a
+    tree whose `children` are the guests (`id` = VMID, api-viewer schema
+    2026-11-26); their volumes are not needed here.
+    """
+    data, error = _get_data(
+        host, port, trust, token, f"{_cluster_backup_job_path(quote(job_id, safe=''))}/included_volumes", timeout
+    )
+    if error is not None:
+        return JobIncludedGuestsResult(reachable=False, error=error)
+    try:
+        vmids = frozenset(int(child["id"]) for child in (data or {}).get("children") or [])
+    except (TypeError, KeyError, ValueError, AttributeError) as exc:
+        return JobIncludedGuestsResult(reachable=False, error=f"unexpected response shape: {exc}")
+    return JobIncludedGuestsResult(reachable=True, vmids=vmids)
 
 
 def get_vzdump_job(

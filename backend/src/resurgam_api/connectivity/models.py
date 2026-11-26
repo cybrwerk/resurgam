@@ -208,6 +208,14 @@ class RemoteSyncJob:
     remove_vanished: bool | None = None
     owner: str | None = None
     comment: str | None = None
+    # ADR 0032 -- from PBS's sync job schema (api-viewer, 2026-11-26). For
+    # `push` (PBS 3.3+) `local_store`/`ns` are the source and
+    # `remote_store`/`remote_ns` the target; for `pull` the other way round.
+    sync_direction: str = "pull"
+    remote_ns: str | None = None
+    max_depth: int | None = None
+    group_filter: tuple[str, ...] | None = None
+    transfer_last: int | None = None
 
 
 @dataclass(frozen=True)
@@ -375,6 +383,32 @@ class RemoteGuest:
     guest_type: str  # "qemu" | "lxc"
     name: str | None = None
     status: str | None = None
+
+
+@dataclass(frozen=True)
+class UnprotectedGuest:
+    """One entry of PVE's `GET /cluster/backup-info/not-backed-up` (api-viewer
+    schema 2026-11-26: `vmid`, `type` qemu|lxc, optional `name`)."""
+
+    vmid: int
+    guest_type: str
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class UnprotectedGuestListResult:
+    reachable: bool
+    guests: list[UnprotectedGuest] | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class JobIncludedGuestsResult:
+    """VMIDs a vzdump job covers, from `GET /cluster/backup/{id}/included_volumes`."""
+
+    reachable: bool
+    vmids: frozenset[int] | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)

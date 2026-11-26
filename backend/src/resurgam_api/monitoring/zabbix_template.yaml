@@ -9,8 +9,9 @@ zabbix_export:
       name: 'RESURGAM by HTTP'
       description: |
         Monitors a RESURGAM appliance over its REST API: whether the API is up, how full each PBS
-        datastore is, and the state and age of the newest backup, verify, prune, garbage collection
-        and sync task per PBS instance. No agent or script on the appliance.
+        datastore is, the state and age of the newest backup, verify, prune, garbage collection
+        and sync task per PBS instance, and 3-2-1 gaps (PVE guests in no backup job, missing or
+        lagging offsite copies). No agent or script on the appliance.
 
         Setup (RESURGAM: Administration -> Zabbix monitoring walks through it):
 
@@ -23,10 +24,11 @@ zabbix_export:
 
         Thresholds: {$RESURGAM.DATASTORE.PUSED.WARN} / {$RESURGAM.DATASTORE.PUSED.CRIT} and
         {$RESURGAM.DATASTORE.FULL.DAYS.WARN} / {$RESURGAM.DATASTORE.FULL.DAYS.CRIT} (per datastore with the
-        datastore name as context) and {$RESURGAM.JOB.AGE.MAX} (per task type as context).
+        datastore name as context), {$RESURGAM.JOB.AGE.MAX} (per task type as context) and
+        {$RESURGAM.GAPS.UNPROTECTED.MAX}. The offsite lag thresholds are set in RESURGAM (3-2-1 Gaps page).
       vendor:
         name: RESURGAM
-        version: 0.3-2
+        version: 0.3-3
       groups:
         - name: Templates/Applications
       items:
@@ -96,6 +98,120 @@ zabbix_export:
           tags:
             - tag: component
               value: raw
+        - uuid: 7f42164c9bd34a4997a614af8142f3c3
+          name: 'Get 3-2-1 gaps'
+          type: HTTP_AGENT
+          key: resurgam.backup_gaps
+          delay: 5m
+          history: '0'
+          value_type: TEXT
+          trends: '0'
+          description: 'GET /api/v1/zabbix/backup-gaps: counts of PVE guests in no backup job and of offsite copy gaps. The 3-2-1 items take their values from here.'
+          url: '{$RESURGAM.URL}/api/v1/zabbix/backup-gaps'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$RESURGAM.TOKEN}'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 80b38c7bc29f4885b07bf20b40fb5e25
+          name: '3-2-1: Guests in no backup job'
+          type: DEPENDENT
+          key: resurgam.gaps.unprotected_guests
+          delay: '0'
+          value_type: UNSIGNED
+          description: 'PVE guests that no enabled backup job covers, without an exception in RESURGAM. RESURGAM -> 3-2-1 Gaps lists them.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.unprotected_guests
+          master_item:
+            key: resurgam.backup_gaps
+          tags:
+            - tag: component
+              value: 3-2-1
+          triggers:
+            - uuid: 861bc15003d04720bd32649343fca5bf
+              expression: 'last(/RESURGAM by HTTP/resurgam.gaps.unprotected_guests)>{$RESURGAM.GAPS.UNPROTECTED.MAX}'
+              name: 'RESURGAM: PVE guests without a backup job'
+              event_name: 'RESURGAM: {ITEM.LASTVALUE1} PVE guests without a backup job'
+              priority: WARNING
+              description: 'Guests that no enabled PVE backup job covers. Add them to a job, or record an exception with a reason in RESURGAM -> 3-2-1 Gaps.'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: 5258540030ce4c75926d1630d2600aea
+          name: '3-2-1: Offsite copy gaps'
+          type: DEPENDENT
+          key: resurgam.gaps.offsite
+          delay: '0'
+          value_type: UNSIGNED
+          description: 'Backup groups whose offsite copy is missing, behind, only on the same PBS, or not checkable, or that no sync job covers although their protection policy requires Sync/DR.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.offsite_gaps
+          master_item:
+            key: resurgam.backup_gaps
+          tags:
+            - tag: component
+              value: 3-2-1
+          triggers:
+            - uuid: d7512f1c47a9428d86a31b8bb72f4cb3
+              expression: 'last(/RESURGAM by HTTP/resurgam.gaps.offsite)>0'
+              name: 'RESURGAM: Workloads without a current offsite copy'
+              event_name: 'RESURGAM: {ITEM.LASTVALUE1} workloads without a current offsite copy'
+              priority: WARNING
+              description: 'See RESURGAM -> 3-2-1 Gaps -> Offsite copies for each workload and why.'
+              dependencies:
+                - name: 'RESURGAM: Offsite copies missing or far behind'
+                  expression: 'last(/RESURGAM by HTTP/resurgam.gaps.offsite_critical)>0'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: 6f8c4f24d1ed4f78910683f94b7d1611
+          name: '3-2-1: Critical offsite copy gaps'
+          type: DEPENDENT
+          key: resurgam.gaps.offsite_critical
+          delay: '0'
+          value_type: UNSIGNED
+          description: 'Of the offsite gaps, how many are critical: no copy arrived, or the copy is more behind than RESURGAM''s critical threshold.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.offsite_critical
+          master_item:
+            key: resurgam.backup_gaps
+          tags:
+            - tag: component
+              value: 3-2-1
+          triggers:
+            - uuid: 4862dfd80086460f8cc539e4879a710c
+              expression: 'last(/RESURGAM by HTTP/resurgam.gaps.offsite_critical)>0'
+              name: 'RESURGAM: Offsite copies missing or far behind'
+              event_name: 'RESURGAM: {ITEM.LASTVALUE1} workloads with offsite copies missing or far behind'
+              priority: HIGH
+              description: 'A sync job should copy these workloads offsite, but the copy is missing or older than the critical threshold set in RESURGAM. Check the sync job on the PBS.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: a5b6de08381e4aaa847d95df333a76a6
+          name: '3-2-1: Largest offsite copy lag'
+          type: DEPENDENT
+          key: resurgam.gaps.offsite_lag
+          delay: '0'
+          value_type: FLOAT
+          units: 'h'
+          description: 'Age of the oldest snapshot not copied offsite yet, over all workloads; -1 when no offsite copy is expected.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.offsite_max_lag_hours
+          master_item:
+            key: resurgam.backup_gaps
+          tags:
+            - tag: component
+              value: 3-2-1
       discovery_rules:
         - uuid: 1fb1ff7ba0ea43b0a9c43ed253a60dcc
           name: 'Datastore discovery'
@@ -423,6 +539,9 @@ zabbix_export:
         - macro: '{$RESURGAM.DATASTORE.FULL.DAYS.WARN}'
           value: '30'
           description: 'Days until full for the "will be full within weeks" trigger. Set per datastore with its name as context.'
+        - macro: '{$RESURGAM.GAPS.UNPROTECTED.MAX}'
+          value: '0'
+          description: 'How many PVE guests without a backup job are accepted before the trigger fires. Better: record an exception with a reason in RESURGAM.'
         - macro: '{$RESURGAM.JOB.AGE.MAX}'
           value: '93600'
           description: 'Seconds since the newest task of a type started before the "for too long" trigger fires (default 26 h, fits a daily schedule). Set per task type with the type as context.'

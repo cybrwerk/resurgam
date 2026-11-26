@@ -1,6 +1,7 @@
 from resurgam_api.models.api_token import ApiToken
 from resurgam_api.models.application_group import ApplicationGroup, ApplicationGroupMember
 from resurgam_api.models.audit import AuditEvent
+from resurgam_api.models.backup_gaps import BackupGapException, GapExceptionKind, GuestGapReason, PveGuestBackupGap
 from resurgam_api.models.billing import PricingPlan
 from resurgam_api.models.customer_file_index_settings import CustomerFileIndexSettings
 from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
@@ -43,6 +44,7 @@ __all__ = [
     "ApplicationGroup",
     "ApplicationGroupMember",
     "AuditEvent",
+    "BackupGapException",
     "BackupGroup",
     "BackupSnapshot",
     "BackupType",
@@ -58,6 +60,8 @@ __all__ = [
     "FileIndexEntry",
     "FileIndexJob",
     "FileRestoreJob",
+    "GapExceptionKind",
+    "GuestGapReason",
     "LabAgentSetupJob",
     "LabNodePairing",
     "LabUplinkIpAllocation",
@@ -68,6 +72,7 @@ __all__ = [
     "ProtectionStatus",
     "PveCluster",
     "PveClusterPbsInstance",
+    "PveGuestBackupGap",
     "RecoveryCode",
     "RestorePlan",
     "RestorePlanNetworkMode",

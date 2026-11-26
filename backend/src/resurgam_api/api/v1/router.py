@@ -7,6 +7,7 @@ from resurgam_api.api.v1 import (
     application_groups,
     audit,
     auth,
+    backup_gaps,
     billing,
     branding,
     compliance_attestations,
@@ -73,6 +74,7 @@ router.include_router(inventory.router)
 router.include_router(protection_policies.router)
 router.include_router(pricing_plans.router)
 router.include_router(alarms.router)
+router.include_router(backup_gaps.router)
 router.include_router(billing.router)
 router.include_router(credentials.router)
 router.include_router(users.router)

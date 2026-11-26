@@ -117,6 +117,25 @@ class ZabbixJobStatusOut(BaseModel):
     jobs: list[ZabbixJobStatusValue]
 
 
+class ZabbixBackupGapsOut(BaseModel):
+    """3-2-1 gap counts (ADR 0032) in one payload -- a single Zabbix master item.
+    Same numbers as the "3-2-1 Gaps" page header; gaps with an exception are
+    not counted."""
+
+    unprotected_guests: int = Field(description="PVE guests no enabled backup job covers.")
+    offsite_gaps: int = Field(
+        description="Backup groups with an offsite gap: copy missing or lagging, same-PBS copy only, target not "
+        "connected, or no sync job although the protection policy requires Sync/DR."
+    )
+    offsite_critical: int = Field(
+        description="Of those, how many are critical (copy missing, or lag over RESURGAM's critical threshold)."
+    )
+    offsite_max_lag_hours: float = Field(
+        description="Largest age in hours of a snapshot not copied offsite yet; -1 when no offsite copy is expected."
+    )
+    excepted: int = Field(description="Gaps accepted with an exception (for reference).")
+
+
 class ZabbixSetupOut(BaseModel):
     """What the Zabbix monitoring wizard shows: the address Zabbix must use,
     the template, and what Zabbix will discover right now."""

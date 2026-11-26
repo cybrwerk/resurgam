@@ -1778,9 +1778,126 @@ export interface OffsiteStatusEntryOut {
   backup_group_id: string;
   workload_label: string;
   has_offsite_copy: boolean;
-  offsite_method: "datastore_role" | "sync_job" | "none";
+  offsite_method: "datastore_role" | "sync_job" | "exception" | "none";
   sync_schedule: string | null;
   last_synced_at: string | null;
+  // RESURGAM 0.3.2+ (ADR 0032); null in older reports.
+  status: OffsiteStatus | null;
+  copy_location: string | null;
+  latest_copy_at: string | null;
+  lag_hours: number | null;
+  exception_reason: string | null;
+  exception_by: string | null;
+  exception_at: string | null;
+}
+
+// --- 3-2-1 gaps (ADR 0032) ---
+
+export type OffsiteStatus =
+  | "ok"
+  | "lagging"
+  | "missing"
+  | "local_copy_only"
+  | "target_not_connected"
+  | "no_copy_job"
+  | "excepted"
+  | "not_required";
+
+export type GapExceptionKind = "pve_guest" | "pve_cluster" | "backup_group" | "datastore";
+
+export interface GapExceptionOut {
+  id: string;
+  target_kind: GapExceptionKind;
+  target_label: string;
+  pve_cluster_id: string | null;
+  vmid: number | null;
+  datastore_id: string | null;
+  namespace: string | null;
+  backup_type: string | null;
+  backup_id: string | null;
+  active: boolean;
+  reason: string;
+  expires_at: string | null;
+  created_by_user_id: string;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface CreateGapExceptionRequest {
+  target_kind: GapExceptionKind;
+  pve_cluster_id?: string | null;
+  vmid?: number | null;
+  datastore_id?: string | null;
+  namespace?: string | null;
+  backup_type?: string | null;
+  backup_id?: string | null;
+  active?: boolean;
+  reason: string;
+  expires_at?: string | null;
+}
+
+export interface GuestGapOut {
+  pve_cluster_id: string;
+  pve_cluster_name: string;
+  vmid: number;
+  guest_type: string;
+  name: string | null;
+  reason: "no_job" | "only_disabled_jobs";
+  first_seen_at: string;
+  last_seen_at: string;
+  exception: GapExceptionOut | null;
+}
+
+export interface PveClusterGapCheckOut {
+  pve_cluster_id: string;
+  pve_cluster_name: string;
+  checked_at: string | null;
+  error: string | null;
+}
+
+export interface OffsiteGapOut {
+  backup_group_id: string;
+  workload_label: string;
+  backup_type: string;
+  backup_id: string;
+  namespace: string;
+  datastore_id: string;
+  datastore_name: string;
+  pbs_instance_name: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  status: OffsiteStatus;
+  raw_status: OffsiteStatus;
+  severity: "critical" | "warning" | null;
+  copy_location: string | null;
+  copy_backup_group_id: string | null;
+  sync_jobs: string[];
+  latest_backup_at: string | null;
+  latest_copy_at: string | null;
+  oldest_uncopied_at: string | null;
+  uncopied_count: number;
+  lag_hours: number | null;
+  exception: GapExceptionOut | null;
+}
+
+export interface BackupGapThresholds {
+  offsite_lag_warning_hours: number;
+  offsite_lag_critical_hours: number;
+}
+
+export interface BackupGapsOut {
+  summary: {
+    unprotected_guests: number;
+    offsite_gaps: number;
+    offsite_critical: number;
+    offsite_max_lag_hours: number | null;
+    offsite_without_copy_job: number;
+    excepted: number;
+  };
+  thresholds: BackupGapThresholds;
+  pve_clusters: PveClusterGapCheckOut[];
+  unprotected_guests: GuestGapOut[];
+  offsite: OffsiteGapOut[];
 }
 
 export type ThreeTwoOneOneZeroLeg = "copies" | "media_types" | "offsite" | "immutable" | "zero_errors";

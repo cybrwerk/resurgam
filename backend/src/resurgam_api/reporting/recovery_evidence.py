@@ -21,11 +21,13 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from resurgam_api.compliance import latest_attestation, leg_applicability
+from resurgam_api.inventory.backup_gaps import compute_offsite_gaps
+from resurgam_api.inventory.offsite import OffsiteStatus
 from resurgam_api.inventory.protection import evaluate_protection_status
 from resurgam_api.inventory.workload_label import workload_label as _workload_label
 from resurgam_api.models.application_group import ApplicationGroup, ApplicationGroupMember
 from resurgam_api.models.audit import AuditEvent
-from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
 from resurgam_api.models.file_index_job import FileIndexJob
 from resurgam_api.models.filerestore_job import FileRestoreJob
 from resurgam_api.models.identity import Role, User, UserRoleAssignment
@@ -33,7 +35,6 @@ from resurgam_api.models.inventory import BackupGroup, BackupSnapshot, PbsAclEnt
 from resurgam_api.models.pbs import PbsInstance
 from resurgam_api.models.restore import RestorePlan, RestorePlanApprovalStatus, RestorePlanExecutionStatus
 from resurgam_api.models.restore_test import RestoreTestPlan, RestoreTestPlanMember, RestoreTestPlanMemberStatus
-from resurgam_api.models.sync import SyncJob
 from resurgam_api.models.tenancy import Customer
 from resurgam_api.reporting.charts import render_kpi_bars_svg, render_protection_level_distribution_svg
 from resurgam_api.reporting.timeline_svg import render_period_timeline_svg
@@ -605,58 +606,49 @@ def compute_protection_level(
 
 
 def compute_offsite_status(db: Session, groups: list[BackupGroup]) -> list[OffsiteStatusEntryOut]:
+    """Per-workload offsite status (ADR 0032): the same evaluation as the
+    3-2-1 Gaps page -- the copy must really exist on another PBS (or an
+    offsite-role datastore) and be current, not just a sync job pointing at
+    the datastore. Groups that are themselves a copy are left out; they are
+    the offsite copy of another workload, not a workload of their own."""
     if not groups:
         return []
-    datastore_ids = {g.datastore_id for g in groups}
-    assignments = {
-        a.datastore_id: a
-        for a in db.query(DatastoreCustomerAssignment)
-        .filter(DatastoreCustomerAssignment.datastore_id.in_(datastore_ids))
-        .all()
-    }
-    sync_job_by_datastore = {}
-    for job in db.query(SyncJob).filter(SyncJob.local_datastore_id.in_(datastore_ids)).all():
-        sync_job_by_datastore.setdefault(job.local_datastore_id, job)
-
+    now = datetime.now(UTC)
     entries: list[OffsiteStatusEntryOut] = []
-    for group in groups:
-        assignment = assignments.get(group.datastore_id)
-        if assignment is not None and assignment.role == DatastoreRole.OFFSITE.value:
-            entries.append(
-                OffsiteStatusEntryOut(
-                    backup_group_id=group.id,
-                    workload_label=_workload_label(group),
-                    has_offsite_copy=True,
-                    offsite_method="datastore_role",
-                    sync_schedule=None,
-                    last_synced_at=None,
-                )
-            )
-            continue
-        sync_job = sync_job_by_datastore.get(group.datastore_id)
-        if sync_job is not None:
-            entries.append(
-                OffsiteStatusEntryOut(
-                    backup_group_id=group.id,
-                    workload_label=_workload_label(group),
-                    has_offsite_copy=True,
-                    offsite_method="sync_job",
-                    sync_schedule=sync_job.schedule,
-                    last_synced_at=sync_job.last_synced_at,
-                )
-            )
-            continue
+    for gap in compute_offsite_gaps(db, None, now, groups=groups):
+        evaluation = gap.evaluation
+        exception = gap.exception
+        has_copy = evaluation.copy_backup_group_id is not None and gap.raw_status in (
+            OffsiteStatus.OK,
+            OffsiteStatus.LAGGING,
+        )
+        if evaluation.status == OffsiteStatus.EXCEPTED:
+            method = "exception"
+        elif evaluation.jobs:
+            method = "sync_job"
+        else:
+            method = "none"
+        author = db.get(User, exception.created_by_user_id) if exception is not None else None
         entries.append(
             OffsiteStatusEntryOut(
-                backup_group_id=group.id,
-                workload_label=_workload_label(group),
-                has_offsite_copy=False,
-                offsite_method="none",
-                sync_schedule=None,
-                last_synced_at=None,
+                backup_group_id=evaluation.group.id,
+                workload_label=_workload_label(evaluation.group),
+                has_offsite_copy=has_copy,
+                offsite_method=method,
+                status=evaluation.status.value,
+                copy_location=evaluation.copy_label,
+                latest_copy_at=evaluation.latest_copy_at,
+                lag_hours=round(evaluation.lag_hours, 1) if evaluation.lag_hours is not None else None,
+                exception_reason=exception.reason if exception is not None else None,
+                exception_by=author.display_name if author is not None else None,
+                exception_at=exception.created_at if exception is not None else None,
             )
         )
+    entries.sort(key=lambda e: e.workload_label.lower())
     return entries
+
+
+_OFFSITE_FINE = ("ok", "excepted", "not_required")
 
 
 def compute_three_two_one_one_zero(
@@ -696,25 +688,28 @@ def compute_three_two_one_one_zero(
                 attested_at=None,
             )
         )
-    elif all(e.has_offsite_copy for e in offsite_status):
-        legs.append(
-            ThreeTwoOneOneZeroOut(
-                leg="offsite",
-                status="met",
-                detail="Every workload has an offsite copy.",
-                attested_by=None,
-                attested_at=None,
+    elif all(e.status in _OFFSITE_FINE for e in offsite_status):
+        excepted = sum(1 for e in offsite_status if e.status == "excepted")
+        detail = "Every workload has a current offsite copy."
+        if excepted:
+            detail = (
+                f"Every workload has a current offsite copy, {excepted} of them by an exception with a "
+                "recorded reason (see Offsite Status)."
             )
+        legs.append(
+            ThreeTwoOneOneZeroOut(leg="offsite", status="met", detail=detail, attested_by=None, attested_at=None)
         )
     else:
-        missing = _summarize_workload_list([e.workload_label for e in offsite_status if not e.has_offsite_copy])
+        missing = [e.workload_label for e in offsite_status if e.status not in (*_OFFSITE_FINE, "lagging")]
+        behind = [e.workload_label for e in offsite_status if e.status == "lagging"]
+        parts = []
+        if missing:
+            parts.append(f"No current offsite copy for: {_summarize_workload_list(missing)}.")
+        if behind:
+            parts.append(f"Offsite copy behind for: {_summarize_workload_list(behind)}.")
         legs.append(
             ThreeTwoOneOneZeroOut(
-                leg="offsite",
-                status="not_met",
-                detail=f"No offsite copy for: {missing}.",
-                attested_by=None,
-                attested_at=None,
+                leg="offsite", status="not_met", detail=" ".join(parts), attested_by=None, attested_at=None
             )
         )
 

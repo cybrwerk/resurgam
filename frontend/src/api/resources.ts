@@ -34,6 +34,11 @@ import type {
   UpdateSourceTestRequest,
   VersionResponse,
   AlarmOut,
+  BackupGapsOut,
+  BackupGapThresholds,
+  CreateGapExceptionRequest,
+  GapExceptionOut,
+  PveClusterGapCheckOut,
   ApplicationGroupCreateRequest,
   ApplicationGroupOut,
   ApplicationGroupUpdateRequest,
@@ -847,6 +852,17 @@ export const pricingPlansApi = {
 
 export const alarmsApi = {
   list: () => apiRequest<AlarmOut[]>("/alarms"),
+};
+
+export const backupGapsApi = {
+  get: () => apiRequest<BackupGapsOut>("/backup-gaps"),
+  exceptions: () => apiRequest<GapExceptionOut[]>("/backup-gaps/exceptions"),
+  createException: (body: CreateGapExceptionRequest) =>
+    apiRequest<GapExceptionOut>("/backup-gaps/exceptions", { method: "POST", body }),
+  updateThresholds: (body: BackupGapThresholds) =>
+    apiRequest<BackupGapThresholds>("/backup-gaps/thresholds", { method: "PUT", body }),
+  checkCluster: (pveClusterId: string) =>
+    apiRequest<PveClusterGapCheckOut>(`/backup-gaps/pve-clusters/${pveClusterId}/check`, { method: "POST" }),
 };
 
 export const billingApi = {

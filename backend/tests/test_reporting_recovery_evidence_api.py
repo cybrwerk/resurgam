@@ -1,3 +1,5 @@
+import pytest
+
 """Endpoint tests for the Recovery Evidence compliance report
 (`GET /reporting/recovery-evidence`). Focuses on customer-scoping (the
 one thing every section must get right independently) and the
@@ -503,42 +505,128 @@ def test_report_denies_out_of_scope_customer(client, platform_admin_headers, db_
     assert response.status_code == 404
 
 
-def test_report_includes_offsite_status_via_sync_job(client, platform_admin_headers, db_session, monkeypatch):
-    """A `SyncJob` targeting this customer's datastore is real replication
-    evidence for the 3-2-1-1-0 "1 offsite" leg -- confirmed end to end
-    through both `offsite_status` and `three_two_one_one_zero`.
-    """
+def _offsite_site(client, headers, db_session, monkeypatch, group_id, copy_ages_hours):
+    """A second PBS that pulls the customer's datastore (ADR 0032), with a copy
+    of the group whose snapshots are `copy_ages_hours` old."""
+    from datetime import UTC, datetime, timedelta
+
     from resurgam_api.models.datastore import Datastore
-    from resurgam_api.models.inventory import BackupGroup
+    from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
     from resurgam_api.models.sync import SyncJob
+
+    group = db_session.get(BackupGroup, group_id)
+    source = db_session.get(Datastore, group.datastore_id)
+    response = client.post(
+        "/api/v1/pbs-instances",
+        json={
+            "display_name": "Offsite PBS",
+            "host": "pbs-offsite.internal.example",
+            "port": 8007,
+            "tls_trust_mode": "ca",
+            "api_token": "test@pbs!token:secretvalue",
+        },
+        headers=headers,
+    )
+    offsite_instance = response.json()["id"]
+    offsite_store = _import_datastore(client, headers, offsite_instance, monkeypatch, name="offsite-store")
+    db_session.add(
+        SyncJob(
+            pbs_instance_id=offsite_instance,
+            job_id="pull-primary",
+            remote_name="primary",
+            remote_store=source.name,
+            remote_host="pbs1.internal.example",
+            local_store_name="offsite-store",
+            schedule="daily",
+        )
+    )
+    copy = BackupGroup(datastore_id=offsite_store, backup_type=group.backup_type, backup_id=group.backup_id)
+    db_session.add(copy)
+    db_session.flush()
+    for age in copy_ages_hours:
+        db_session.add(BackupSnapshot(backup_group_id=copy.id, snapshot_time=datetime.now(UTC) - timedelta(hours=age)))
+    db_session.commit()
+
+
+def test_report_offsite_status_from_a_real_copy(client, platform_admin_headers, db_session, monkeypatch):
+    """ADR 0032: the offsite leg needs a copy that really exists on another
+    PBS and is current -- not just a sync job somewhere."""
+    customer_id, group_id, _snapshot_id = _setup_customer_with_group(
+        client, platform_admin_headers, db_session, monkeypatch
+    )
+    _offsite_site(client, platform_admin_headers, db_session, monkeypatch, group_id, copy_ages_hours=(0,))
+
+    body = client.get(
+        f"/api/v1/reporting/recovery-evidence?customer_id={customer_id}", headers=platform_admin_headers
+    ).json()
+    assert len(body["offsite_status"]) == 1  # the copy is not a workload of its own
+    entry = body["offsite_status"][0]
+    assert entry["has_offsite_copy"] is True
+    assert entry["offsite_method"] == "sync_job"
+    assert entry["status"] == "ok"
+    assert entry["copy_location"] == "Offsite PBS / offsite-store"
+    offsite_leg = next(leg for leg in body["three_two_one_one_zero"] if leg["leg"] == "offsite")
+    assert offsite_leg["status"] == "met"
+
+
+def test_report_offsite_leg_not_met_when_copy_is_behind(client, platform_admin_headers, db_session, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from resurgam_api.models.inventory import BackupSnapshot
+
+    customer_id, group_id, snapshot_id = _setup_customer_with_group(
+        client, platform_admin_headers, db_session, monkeypatch
+    )
+    db_session.get(BackupSnapshot, snapshot_id).snapshot_time = datetime.now(UTC) - timedelta(hours=100)
+    db_session.commit()
+    _offsite_site(client, platform_admin_headers, db_session, monkeypatch, group_id, copy_ages_hours=(200,))
+
+    body = client.get(
+        f"/api/v1/reporting/recovery-evidence?customer_id={customer_id}", headers=platform_admin_headers
+    ).json()
+    entry = body["offsite_status"][0]
+    assert entry["has_offsite_copy"] is True
+    assert entry["status"] == "lagging"
+    assert entry["lag_hours"] == pytest.approx(100, abs=0.1)
+    offsite_leg = next(leg for leg in body["three_two_one_one_zero"] if leg["leg"] == "offsite")
+    assert offsite_leg["status"] == "not_met"
+    assert offsite_leg["detail"].startswith("Offsite copy behind for: ")
+
+
+def test_report_shows_offsite_exception_with_reason(client, platform_admin_headers, db_session, monkeypatch):
+    from resurgam_api.models.inventory import BackupGroup
 
     customer_id, group_id, _snapshot_id = _setup_customer_with_group(
         client, platform_admin_headers, db_session, monkeypatch
     )
     group = db_session.get(BackupGroup, group_id)
-    sync_job = SyncJob(
-        pbs_instance_id=db_session.get(Datastore, group.datastore_id).pbs_instance_id,
-        job_id="sync-1",
-        remote_name="remote1",
-        remote_store="offsite-store",
-        local_store_name="store1",
-        local_datastore_id=group.datastore_id,
-        schedule="daily",
+    response = client.post(
+        "/api/v1/backup-gaps/exceptions",
+        json={
+            "target_kind": "datastore",
+            "datastore_id": str(group.datastore_id),
+            "reason": "Weekly tape copy, stored at the second site.",
+        },
+        headers=platform_admin_headers,
     )
-    db_session.add(sync_job)
-    db_session.commit()
+    assert response.status_code == 201
 
-    response = client.get(
+    body = client.get(
         f"/api/v1/reporting/recovery-evidence?customer_id={customer_id}", headers=platform_admin_headers
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body["offsite_status"]) == 1
-    assert body["offsite_status"][0]["has_offsite_copy"] is True
-    assert body["offsite_status"][0]["offsite_method"] == "sync_job"
-
+    ).json()
+    entry = body["offsite_status"][0]
+    assert entry["offsite_method"] == "exception"
+    assert entry["status"] == "excepted"
+    assert entry["exception_reason"] == "Weekly tape copy, stored at the second site."
+    assert entry["exception_by"]
     offsite_leg = next(leg for leg in body["three_two_one_one_zero"] if leg["leg"] == "offsite")
     assert offsite_leg["status"] == "met"
+    assert "1 of them by an exception" in offsite_leg["detail"]
+
+    pdf = client.get(
+        f"/api/v1/reporting/recovery-evidence/pdf?customer_id={customer_id}", headers=platform_admin_headers
+    )
+    assert pdf.status_code == 200
 
 
 def test_report_offsite_leg_is_not_met_without_a_copy(client, platform_admin_headers, db_session, monkeypatch):

@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from resurgam_api.connectivity.models import DatastoreListResult, RemoteDatastore
@@ -259,6 +260,15 @@ def test_template_reads_only_fields_the_api_provides():
             checked += 1
     assert checked == 9
 
+    # Dependent items on the 3-2-1 master item read top-level fields.
+    gap_fields = set(schemas.ZabbixBackupGapsOut.model_fields)
+    dependent = [i for i in template["items"] if i.get("master_item", {}).get("key") == "resurgam.backup_gaps"]
+    assert len(dependent) == 4
+    for item in dependent:
+        path = item["preprocessing"][0]["parameters"][0]
+        assert re.match(r"\$\.(\w+)$", path), path
+        assert path[2:] in gap_fields, path
+
 
 def test_setup_summarizes_what_zabbix_will_discover(
     client, platform_admin_headers, db_session, monkeypatch, test_settings
@@ -291,3 +301,47 @@ def test_ca_certificate_download(client, platform_admin_headers, test_settings, 
     response = client.get("/api/v1/zabbix/ca-certificate", headers=platform_admin_headers)
     assert response.status_code == 200
     assert response.text == pem
+
+
+def test_backup_gaps_counts(client, platform_admin_headers, db_session, monkeypatch):
+    from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
+
+    instance_id = _create_pbs_instance(client, platform_admin_headers)
+    datastore_id = _import_datastore(client, platform_admin_headers, instance_id, monkeypatch)
+    response = client.get("/api/v1/zabbix/backup-gaps", headers=platform_admin_headers)
+    assert response.json() == {
+        "unprotected_guests": 0,
+        "offsite_gaps": 0,
+        "offsite_critical": 0,
+        "offsite_max_lag_hours": -1,
+        "excepted": 0,
+    }
+
+    group = BackupGroup(datastore_id=uuid.UUID(datastore_id), backup_type="vm", backup_id="100")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add(BackupSnapshot(backup_group_id=group.id, snapshot_time=datetime.now(UTC)))
+    db_session.commit()
+    # No sync job covers it: listed, but no gap while no policy requires Sync/DR.
+    assert client.get("/api/v1/zabbix/backup-gaps", headers=platform_admin_headers).json()["offsite_gaps"] == 0
+
+    from resurgam_api.models.inventory import ProtectionPolicy
+    from resurgam_api.models.tenancy import Customer
+
+    customer = Customer(name="Acme", slug="acme", debitor_number="d-acme", match_code="ACM")
+    db_session.add(customer)
+    db_session.flush()
+    policy = ProtectionPolicy(
+        customer_id=customer.id,
+        name="DR",
+        expected_interval_hours=24,
+        max_time_since_last_backup_hours=48,
+        sync_dr_required=True,
+    )
+    db_session.add(policy)
+    db_session.flush()
+    group.protection_policy_id = policy.id
+    db_session.commit()
+    body = client.get("/api/v1/zabbix/backup-gaps", headers=platform_admin_headers).json()
+    assert body["offsite_gaps"] == 1
+    assert body["offsite_critical"] == 0

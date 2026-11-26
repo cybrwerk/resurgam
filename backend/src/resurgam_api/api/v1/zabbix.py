@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from resurgam_api import monitoring
+from resurgam_api.api.v1.backup_gaps import build_backup_gaps
 from resurgam_api.auth.dependency import require_role
 from resurgam_api.config import Settings, get_settings
 from resurgam_api.db import get_db
@@ -30,6 +31,7 @@ from resurgam_api.models.inventory import TaskRun
 from resurgam_api.models.pbs import PbsInstance
 from resurgam_api.models.usage import UsageMeasurement
 from resurgam_api.schemas.zabbix import (
+    ZabbixBackupGapsOut,
     ZabbixDatastoreDiscoveryEntry,
     ZabbixDatastoreDiscoveryOut,
     ZabbixDatastoreUsageOut,
@@ -259,3 +261,17 @@ def zabbix_job_status(db: Session = Depends(get_db), _user=Depends(_require_plat
         )
     values.sort(key=lambda value: (value.pbs_instance_id, value.task_type))
     return ZabbixJobStatusOut(jobs=values)
+
+
+@router.get("/backup-gaps", response_model=ZabbixBackupGapsOut)
+def zabbix_backup_gaps(db: Session = Depends(get_db), _user=Depends(_require_platform_admin)) -> ZabbixBackupGapsOut:
+    """3-2-1 gap counts for the template's "3-2-1 gaps" items (ADR 0032), from
+    the same computation as GET /backup-gaps."""
+    summary = build_backup_gaps(db, None).summary
+    return ZabbixBackupGapsOut(
+        unprotected_guests=summary.unprotected_guests,
+        offsite_gaps=summary.offsite_gaps,
+        offsite_critical=summary.offsite_critical,
+        offsite_max_lag_hours=summary.offsite_max_lag_hours if summary.offsite_max_lag_hours is not None else -1,
+        excepted=summary.excepted,
+    )

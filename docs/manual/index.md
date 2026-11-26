@@ -300,6 +300,7 @@ appliance's address already filled in, and lists every value to enter in Zabbix.
 | API | readiness, every minute | "API is not ready" (high), "API unreachable" -- no answer for 10 min (high) |
 | Each datastore (discovered) | used %, used, available, total size, time since last measurement, net growth per day, full in (days; -1 = no full date) | "filling up" > `{$RESURGAM.DATASTORE.PUSED.WARN}` (warning), "almost full" > `{$RESURGAM.DATASTORE.PUSED.CRIT}` (high), "will be full within weeks" <= `{$RESURGAM.DATASTORE.FULL.DAYS.WARN}` days (warning), "will be full soon" <= `{$RESURGAM.DATASTORE.FULL.DAYS.CRIT}` days (high), "not measured for a while" > `{$RESURGAM.DATA.AGE.MAX}` (average) |
 | Each PBS × task type (discovered: backup, verify, prune, garbage_collection, sync) | status of the newest task, time since it started | "Last … task failed" (average), "No … task for too long" > `{$RESURGAM.JOB.AGE.MAX}` (warning) |
+| 3-2-1 gaps | guests in no backup job, offsite copy gaps, critical offsite gaps, largest offsite lag (hours; -1 = no copy expected) | "PVE guests without a backup job" > `{$RESURGAM.GAPS.UNPROTECTED.MAX}` (warning), "Workloads without a current offsite copy" > 0 (warning), "Offsite copies missing or far behind" > 0 (high). Same counting as *3-2-1 gaps*; accepted gaps are not counted |
 
 Values come every 5 minutes (one request per topic; the per-datastore and per-job items read from it).
 Discovery runs hourly; items of datastores and job types RESURGAM no longer knows are disabled at once
@@ -336,6 +337,7 @@ datastore or one task type only:
 | `{$RESURGAM.JOB.AGE.MAX}` | 93600 (26 h) | seconds since the newest task of a type started; `:"verify"` and `:"garbage_collection"` default to 691200 (8 days) |
 | `{$RESURGAM.DATA.AGE.MAX}` | 3600 | seconds without a new datastore measurement |
 | `{$RESURGAM.JOB.TYPE.NOT_MATCHES}` | `^unknown$` | task types not to discover (regular expression) |
+| `{$RESURGAM.GAPS.UNPROTECTED.MAX}` | 0 | PVE guests without a backup job before the trigger fires; better record an exception with a reason in RESURGAM. The offsite lag thresholds are set in RESURGAM (3-2-1 Gaps → Thresholds) |
 
 **TLS:** the template's HTTP items do not verify the appliance's certificate, so the appliance's own
 certificate (Caddy's internal CA) works as is. To verify it, add the appliance's CA certificate
@@ -420,6 +422,57 @@ out through the alert mailer like every other alarm. It is not raised when the u
 (80 % / 95 % used) already has the same or a higher severity, so one datastore does not report the
 same problem twice.
 
+### 3-2-1 gaps: unprotected guests and offsite copies
+
+*Reporting → 3-2-1 Gaps* answers two questions (design: ADR 0032).
+
+**Offsite copies** (every user, for the workloads they may see). For each backup group RESURGAM looks
+for its copy on another PBS, following the PBS sync jobs it knows: pull and push jobs (PBS 3.3+),
+including their namespaces, `max-depth` and group filters. A sync job's remote is matched to a
+connected PBS instance by its certificate fingerprint, else by host and port. A copy counts as offsite
+when it is on another PBS instance, or on a datastore with the role "offsite".
+
+| Status | Meaning | Alarm |
+|---|---|---|
+| Current | the copy holds every backup, or the newest ones are within the warning threshold (still in transit) | -- |
+| Behind | the oldest backup not copied yet is older than the warning / critical threshold | warning / critical |
+| Copy missing | a sync job should copy the workload offsite, but nothing arrived within the warning threshold | critical |
+| Same PBS only | the only copy is on the same PBS (a second copy, not offsite) | warning |
+| Not checkable | the sync job copies to a PBS that is not connected to RESURGAM | warning |
+| No sync job | no sync job covers the workload | warning only if its protection policy has **Sync/DR required**; otherwise listed without alarm |
+| Accepted | a platform admin accepted the gap with a reason | -- |
+| Not required | the tenant's "1 offsite" 3-2-1-1-0 leg is marked not applicable | -- |
+
+The thresholds (default 36 h warning, 72 h critical) are on the *Thresholds* tab. Daily backups with a
+daily sync are usually between 1 and 26 hours behind. Alarms come one per source datastore and tenant
+("3 workloads with no offsite copy arrived: …"), so they also reach the alert mailer that way.
+
+**Unprotected guests** (platform admins). Every collector run asks each PVE cluster for the guests no
+backup job covers (`GET /cluster/backup-info/not-backed-up`). PVE counts a *disabled* job as coverage,
+so RESURGAM also reads every job's guest list (`/cluster/backup/{id}/included_volumes`) and lists
+guests that only disabled jobs cover. RESURGAM's own VMs (lab template, disk mount helpers, VMs of lab
+runs from the last 24 hours) are left out. "Check now" re-checks a cluster at once. The PVE token needs
+`VM.Audit` on `/vms` (part of the standard RESURGAM token): PVE silently leaves out guests the token
+cannot see. Alarm: *guest not backed up*, one per cluster.
+
+**Accepting a gap.** Some gaps are intended: a template, a test VM, a whole lab cluster, or an offsite
+copy RESURGAM cannot see (tape, a PBS it does not manage). "Accept…" records an exception for the one
+workload/guest or for the whole datastore/cluster, with a reason (at least 10 characters) and an
+optional end date. The gap then raises no alarm and counts as covered in the Recovery Evidence report,
+which prints the reason, who recorded it and when. Exceptions are never edited or deleted:
+"Revoke…" adds a new entry, and the *Exceptions* tab (platform admins, auditors) shows the full
+history. Every change is also in the audit log.
+
+**Recovery Evidence report.** The "Offsite Status" table and the "1 offsite" leg of 3-2-1-1-0 use the
+same evaluation: the leg is met only when every workload has a current offsite copy, an accepted
+exception, or the leg is not required. Before 0.3.2 a workload counted as offsite as soon as any sync
+job pointed at its datastore, without checking that the copy exists.
+
+**Zabbix**: counts and the largest lag, see *Zabbix monitoring*. **API**: `GET /api/v1/backup-gaps`
+(everything the page shows), `POST /api/v1/backup-gaps/exceptions`, `GET /api/v1/backup-gaps/exceptions`,
+`PUT /api/v1/backup-gaps/thresholds`, `POST /api/v1/backup-gaps/pve-clusters/{id}/check` -- fields
+documented in `/docs`.
+
 ### Alert mailer (per tenant)
 
 Mails a tenant's alarms to the people responsible for them. Open the tenant (Administration →
@@ -434,7 +487,8 @@ Tenants → a tenant, or the tenant's own Customer Panel) → "Alert mailer" →
 
 What gets mailed are the tenant's Dashboard alarms: a backup group whose **protection policy** reports
 warning or critical (no policy assigned, no alarm -- unlike the Overdue Backups panel's fixed 48h/30d
-age rule), and a datastore at 80% (warning) or 95% (critical) used. Alarms on datastores or groups
+age rule), a datastore at 80% (warning) or 95% (critical) used, and the tenant's offsite copy gaps
+(see *3-2-1 gaps*; a workload without any sync job only when its policy requires Sync/DR). Alarms on datastores or groups
 that belong to no tenant are not mailed. The check runs every 5 minutes, right after the collector's
 sync, and sends **one summary mail per tenant per change** -- new alarms, alarms escalated to critical,
 resolved alarms and due reminders, with the still-open ones listed below -- never one mail per alarm or
@@ -737,6 +791,8 @@ Refreshed by the same `/sync` call as tasks and inventory:
 ```bash
 curl "localhost:8000/api/v1/pbs-instances/<pbs-instance-id>/sync-jobs" -H "Authorization: Bearer $TOKEN"
 ```
+
+Since 0.3.2 the collector asks for `sync-direction=all`, so push jobs (PBS 3.3+) are listed too, and also stores each job's namespaces, `max-depth`, group filter, `transfer-last` and the remote's host/port/fingerprint -- the input for *3-2-1 gaps*.
 
 Unlike everything else added this milestone, PBS's `config/remote`/`config/sync` endpoints could not be verified against a real instance (both reachable but empty on the only one available) — the parsed field shapes are best-effort from PBS documentation only, flagged explicitly in `docs/milestone-1-pbs-pve-api-assumptions.md` and in `connectivity/pbs_api.py`'s docstrings. A sync job's "last run" status also isn't correlated from task history — no real sync/syncjob task was ever observed to confirm the `worker_id` format needed for that correlation, so the frontend shows configured jobs and task history side by side rather than merged.
 

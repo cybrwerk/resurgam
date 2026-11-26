@@ -13,6 +13,7 @@ from resurgam_api.connectivity.pbs_api import (
     list_acl_entries,
     list_datastore_usage,
     list_datastores,
+    list_remotes,
     list_snapshots,
     list_sync_jobs,
     list_tasks,
@@ -711,11 +712,22 @@ def sync_instance_sync_jobs(db: Session, settings: Settings, instance: PbsInstan
     token = _get_token(db, settings, instance.api_token_secret_ref_id)
     trust = _trust_for(instance)
 
-    result = list_sync_jobs(instance.host, instance.port, trust, token, timeout=settings.connectivity_timeout_seconds)
+    result = list_sync_jobs(
+        instance.host, instance.port, trust, token, timeout=settings.connectivity_timeout_seconds, all_directions=True
+    )
     if not result.reachable:
         return SyncJobSyncResult(reachable=False, error=result.error)
 
     datastores_by_name = {d.name: d.id for d in db.query(Datastore).filter_by(pbs_instance_id=instance.id).all()}
+    # ADR 0032: the remote's address, to find the PBS on the other side of
+    # the job. Best effort -- without it the copy shows as "target not
+    # connected", never as an error of the whole sync.
+    remotes_by_name = {}
+    if any(job.remote_name for job in result.sync_jobs):
+        remotes = list_remotes(
+            instance.host, instance.port, trust, token, timeout=settings.connectivity_timeout_seconds
+        )
+        remotes_by_name = {r.name: r for r in remotes.remotes or []} if remotes.reachable else {}
 
     created = updated = 0
     now = datetime.now(UTC)
@@ -723,6 +735,18 @@ def sync_instance_sync_jobs(db: Session, settings: Settings, instance: PbsInstan
     for job in result.sync_jobs:
         existing = db.query(SyncJob).filter_by(pbs_instance_id=instance.id, job_id=job.job_id).one_or_none()
         local_datastore_id = datastores_by_name.get(job.local_store)
+        remote = remotes_by_name.get(job.remote_name) if job.remote_name else None
+        copy_fields = {
+            "sync_direction": job.sync_direction,
+            "local_ns": job.ns,
+            "remote_ns": job.remote_ns,
+            "max_depth": job.max_depth,
+            "group_filter": list(job.group_filter) if job.group_filter is not None else None,
+            "transfer_last": job.transfer_last,
+            "remote_host": remote.host if remote else None,
+            "remote_port": remote.port if remote else None,
+            "remote_fingerprint": remote.fingerprint if remote else None,
+        }
 
         if existing is None:
             db.add(
@@ -736,6 +760,7 @@ def sync_instance_sync_jobs(db: Session, settings: Settings, instance: PbsInstan
                     schedule=job.schedule,
                     remove_vanished=job.remove_vanished,
                     comment=job.comment,
+                    **copy_fields,
                 )
             )
             created += 1
@@ -747,6 +772,8 @@ def sync_instance_sync_jobs(db: Session, settings: Settings, instance: PbsInstan
             existing.schedule = job.schedule
             existing.remove_vanished = job.remove_vanished
             existing.comment = job.comment
+            for field, value in copy_fields.items():
+                setattr(existing, field, value)
             existing.last_synced_at = now
             updated += 1
 

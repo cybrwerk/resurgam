@@ -738,14 +738,31 @@ def _sync_job_from_entry(entry: dict) -> RemoteSyncJob:
         remove_vanished=entry.get("remove-vanished"),
         owner=entry.get("owner"),
         comment=entry.get("comment"),
+        sync_direction=entry.get("sync-direction") or "pull",
+        remote_ns=entry.get("remote-ns"),
+        max_depth=entry.get("max-depth"),
+        group_filter=tuple(entry["group-filter"]) if isinstance(entry.get("group-filter"), list) else None,
+        transfer_last=entry.get("transfer-last"),
     )
 
 
-def list_sync_jobs(host: str, port: int, trust: TrustConfig, token: str, timeout: float = 5.0) -> SyncJobListResult:
+def list_sync_jobs(
+    host: str, port: int, trust: TrustConfig, token: str, timeout: float = 5.0, *, all_directions: bool = False
+) -> SyncJobListResult:
     """List configured "Sync Jobs" via `GET /config/sync`. Field shape
     confirmed live 2026-09-26 (see `RemoteSyncJob`'s own docstring).
+
+    PBS returns only pull jobs unless asked for `sync-direction=all` (its
+    schema's default is `pull`). `all_directions=True` asks for both, and
+    falls back to the plain call on a PBS older than 3.3, which rejects the
+    unknown parameter.
     """
-    data, error = _get_data(host, port, trust, token, SYNC_CONFIG_PATH, timeout)
+    if all_directions:
+        data, error = _get_data(host, port, trust, token, SYNC_CONFIG_PATH, timeout, params={"sync-direction": "all"})
+        if error is not None:
+            data, error = _get_data(host, port, trust, token, SYNC_CONFIG_PATH, timeout)
+    else:
+        data, error = _get_data(host, port, trust, token, SYNC_CONFIG_PATH, timeout)
     if error is not None:
         return SyncJobListResult(reachable=False, error=error)
 

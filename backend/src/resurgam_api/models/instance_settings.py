@@ -38,3 +38,9 @@ class InstanceSettings(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     require_mfa_all_local_users: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+
+    # ADR 0032: how old the oldest not-yet-copied snapshot of a backup group
+    # may get before its offsite copy counts as lagging. Null = the defaults
+    # in `inventory/offsite.py`.
+    offsite_lag_warning_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    offsite_lag_critical_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)

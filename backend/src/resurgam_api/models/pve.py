@@ -137,6 +137,10 @@ class PveCluster(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     # Hours a VM may run from the backup before an alarm says "move it to
     # storage" (ADR 0030 §6; 24 confirmed by the user 2026-11-16).
     instant_recovery_alarm_hours: Mapped[int] = mapped_column(Integer, default=24, server_default="24", nullable=False)
+    # ADR 0032: last check for guests no backup job covers (`pve_guest_backup_gaps`)
+    # and the error of that check, if it failed.
+    backup_gaps_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    backup_gaps_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class LabUplinkIpAllocation(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):

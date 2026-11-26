@@ -18,7 +18,14 @@ class AlarmOut(BaseModel):
             "`encryption_key_missing` (backups in a datastore are encrypted with a key RESURGAM does not have -- "
             "they cannot be indexed, browsed or restored here), "
             "`encryption_key_copy_unconfirmed` (no one confirmed yet that a copy of a stored key is kept outside "
-            "RESURGAM; platform admins only)."
+            "RESURGAM; platform admins only), "
+            "`guest_not_backed_up` (PVE guests that no enabled backup job covers, one alarm per cluster; platform "
+            "admins only), `offsite_copy_missing` (a sync job should copy these workloads offsite but no copy arrived "
+            "within the warning threshold), `offsite_copy_lagging_critical` / `offsite_copy_lagging_warning` (the "
+            "oldest snapshot not copied offsite yet is older than the critical / warning threshold), "
+            "`offsite_copy_gap` (no checked offsite copy: a copy on the same PBS only, a target PBS not connected to "
+            "RESURGAM, or no sync job although the protection policy requires Sync/DR). The offsite alarms are one per source datastore and customer; see "
+            "GET /backup-gaps for each workload."
         )
     )
     severity: str = Field(description="`critical` or `warning`.")
@@ -26,5 +33,7 @@ class AlarmOut(BaseModel):
     customer_name: str | None = Field(default=None, description="Display name of `customer_id`.")
     customer_match_code: str | None = Field(default=None, description="Three-letter short code of `customer_id`.")
     message: str = Field(description="Human-readable description, ready to show.")
-    entity_type: str = Field(description="`backup_group`, `datastore`, `restore_plan` or `encryption_key`.")
+    entity_type: str = Field(
+        description="`backup_group`, `datastore`, `restore_plan`, `encryption_key` or `pve_cluster`."
+    )
     entity_id: UUID = Field(description="ID of the affected entity (of `entity_type`).")
