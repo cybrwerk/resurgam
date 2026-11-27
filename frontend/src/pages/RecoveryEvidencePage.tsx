@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { customersApi, reportingApi } from "../api/resources";
 import { ApiError, downloadFile } from "../api/client";
-import type { RecoveryEvidenceReportOut, ReportHistoryOut } from "../api/types";
+import type { OffsiteStatus, RecoveryEvidenceReportOut, ReportHistoryOut } from "../api/types";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
 import { InlineAlert } from "../components/InlineAlert";
@@ -12,10 +12,21 @@ import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { QueryState } from "../components/QueryState";
 import { Spinner } from "../components/Spinner";
-import { StatusBadge } from "../components/StatusBadge";
+import { StatusBadge, type StatusTone } from "../components/StatusBadge";
 import { useSelectedCustomer } from "../contexts/CustomerContext";
 import { protectionStatusPresentation, verifyStatusPresentation } from "../lib/statusPresentation";
 import styles from "./RecoveryEvidencePage.module.css";
+
+const OFFSITE_STATUS_TONE: Record<OffsiteStatus, StatusTone> = {
+  ok: "ok",
+  lagging: "warning",
+  missing: "danger",
+  local_copy_only: "warning",
+  target_not_connected: "warning",
+  no_copy_job: "danger",
+  excepted: "info",
+  not_required: "unknown",
+};
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "—";
@@ -275,11 +286,25 @@ export function RecoveryEvidencePage() {
     {
       key: "copy",
       header: t("recoveryEvidence.offsiteCopy"),
-      render: (r) => <StatusBadge tone={r.has_offsite_copy ? "ok" : "danger"} label={r.has_offsite_copy ? t("common.yes") : t("common.no")} />,
+      render: (r) =>
+        r.status ? (
+          <StatusBadge tone={OFFSITE_STATUS_TONE[r.status]} label={t(`backupGaps.status.${r.status}`)} />
+        ) : (
+          // Reports generated before ADR 0032 have no status.
+          <StatusBadge tone={r.has_offsite_copy ? "ok" : "danger"} label={r.has_offsite_copy ? t("common.yes") : t("common.no")} />
+        ),
     },
-    { key: "method", header: t("recoveryEvidence.method"), render: (r) => r.offsite_method },
-    { key: "schedule", header: t("recoveryEvidence.schedule"), render: (r) => r.sync_schedule ?? "—" },
-    { key: "lastSynced", header: t("recoveryEvidence.lastSynced"), render: (r) => formatDateTime(r.last_synced_at) },
+    { key: "location", header: t("backupGaps.copyAt"), render: (r) => r.copy_location ?? "—" },
+    { key: "latestCopy", header: t("backupGaps.latestCopy"), render: (r) => formatDateTime(r.latest_copy_at ?? null) },
+    { key: "lag", header: t("backupGaps.lag"), render: (r) => (r.lag_hours === null || r.lag_hours === undefined ? "—" : `${Math.round(r.lag_hours)} h`) },
+    {
+      key: "note",
+      header: t("recoveryEvidence.offsiteNote"),
+      render: (r) =>
+        r.exception_reason
+          ? `${r.exception_reason} (${r.exception_by ?? "?"}, ${r.exception_at ? new Date(r.exception_at).toLocaleDateString() : "?"})`
+          : "—",
+    },
   ];
 
   return (

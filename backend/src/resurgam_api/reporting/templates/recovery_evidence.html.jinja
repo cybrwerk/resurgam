@@ -251,9 +251,14 @@
 {{ controls("offsite_status") }}
 {% if report.offsite_status %}
 <table>
-  <tr><th>Workload</th><th>Offsite copy</th><th>Method</th><th>Schedule</th><th>Last synced</th></tr>
+  {% set status_labels = {"ok": "Current", "lagging": "Behind", "missing": "Missing", "local_copy_only": "Same PBS only", "target_not_connected": "Not checkable", "no_copy_job": "No sync job", "excepted": "Accepted", "not_required": "Not required"} %}
+  <tr><th>Workload</th><th>Status</th><th>Copy at</th><th>Newest copy</th><th>Lag</th><th>Note</th></tr>
   {% for e in report.offsite_status %}
-  <tr><td>{{ e.workload_label }}</td><td>{{ "Yes" if e.has_offsite_copy else "No" }}</td><td>{{ e.offsite_method }}</td><td>{{ e.sync_schedule or "--" }}</td><td>{{ e.last_synced_at or "--" }}</td></tr>
+  {% if e.status %}
+  <tr><td>{{ e.workload_label }}</td><td>{{ status_labels.get(e.status, e.status) }}</td><td>{{ e.copy_location or "--" }}</td><td>{{ e.latest_copy_at.strftime("%Y-%m-%d %H:%M") if e.latest_copy_at else "--" }}</td><td>{{ "%.0f h" % e.lag_hours if e.lag_hours is not none else "--" }}</td><td>{% if e.exception_reason %}{{ e.exception_reason }} ({{ e.exception_by or "?" }}, {{ e.exception_at.strftime("%Y-%m-%d") if e.exception_at else "?" }}){% else %}--{% endif %}</td></tr>
+  {% else %}
+  <tr><td>{{ e.workload_label }}</td><td>{{ "Yes" if e.has_offsite_copy else "No" }}</td><td>{{ e.offsite_method }}</td><td>--</td><td>--</td><td>--</td></tr>
+  {% endif %}
   {% endfor %}
 </table>
 {% else %}

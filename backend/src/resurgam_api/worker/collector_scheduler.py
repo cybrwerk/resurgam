@@ -59,6 +59,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from resurgam_api.alert_mailer import ALERT_MAILER_INTERVAL_SECONDS, run_alert_mailer
+from resurgam_api.collector.backup_gaps import run_due_backup_gap_checks
 from resurgam_api.collector.heartbeat import (
     HEARTBEAT_INTERVAL_MINUTES,
     run_due_heartbeats,
@@ -135,6 +136,14 @@ def run_tick(db: Session, settings) -> None:
         db.rollback()
         logger.exception("collector scheduler: could not determine due PBS instances")
         return
+
+    try:
+        # ADR 0032: guests no enabled backup job covers, same interval as the
+        # inventory sync. Isolated per cluster inside.
+        run_due_backup_gap_checks(db, settings, interval_minutes)
+    except Exception:
+        db.rollback()
+        logger.exception("collector scheduler: backup gap check failed")
 
     for instance in due:
         instance_id = instance.id

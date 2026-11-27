@@ -7,6 +7,7 @@ import { NAV_TREE, IMPLEMENTED_PATHS, type NavSection } from "./nav/navTree";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { BillingPage } from "./pages/BillingPage";
+import { BackupGapsPage } from "./pages/BackupGapsPage";
 import { CapacityTrendsPage } from "./pages/CapacityTrendsPage";
 import { CredentialsPage } from "./pages/CredentialsPage";
 import { CustomerPanelPage } from "./pages/CustomerPanelPage";
@@ -66,6 +67,7 @@ const PAGE_BY_PATH: Record<string, ReactNode> = {
   "/administration/system-settings": <SystemSettingsPage />,
   "/administration/audit-log": <AuditLogPage />,
   "/reporting/capacity-trends": <CapacityTrendsPage />,
+  "/reporting/backup-gaps": <BackupGapsPage />,
   "/reporting/tenant-usage": <BillingPage />,
   "/reporting/recovery-evidence": <RecoveryEvidencePage />,
   "/recovery/restore-center": <RestoreCenterPage />,

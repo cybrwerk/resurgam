@@ -1,0 +1,28 @@
+.panelToolbar {
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-block-end: 1px solid var(--border, transparent);
+}
+
+.empty {
+  padding: var(--space-4, 16px);
+  margin: 0;
+}
+
+.note {
+  max-width: 32ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-3, 12px);
+  display: grid;
+  gap: var(--space-1, 4px);
+}
+
+.clusterRow {
+  display: contents;
+}

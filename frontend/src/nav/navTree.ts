@@ -111,6 +111,7 @@ export const NAV_TREE: NavSection[] = [
     icon: ChartIcon,
     children: [
       { labelKey: "nav.reportingCapacityTrends", path: "/reporting/capacity-trends" },
+      { labelKey: "nav.reportingBackupGaps", path: "/reporting/backup-gaps" },
       { labelKey: "nav.reportingTenantUsage", path: "/reporting/tenant-usage" },
       { labelKey: "nav.reportingRecoveryEvidence", path: "/reporting/recovery-evidence" },
     ],
@@ -198,6 +199,7 @@ export const IMPLEMENTED_PATHS = new Set<string>([
   "/administration/system-settings",
   "/administration/audit-log",
   "/reporting/capacity-trends",
+  "/reporting/backup-gaps",
   "/reporting/tenant-usage",
   "/reporting/recovery-evidence",
   "/recovery/restore-center",

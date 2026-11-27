@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from resurgam_api.db import Base
@@ -28,7 +28,8 @@ class SyncJob(Base, UUIDPrimaryKeyMixin):
         UUID(as_uuid=True), ForeignKey("pbs_instances.id", ondelete="CASCADE"), nullable=False
     )
     job_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    remote_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Null for a sync between two datastores of the same PBS (no remote).
+    remote_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     remote_store: Mapped[str] = mapped_column(String(200), nullable=False)
     local_store_name: Mapped[str] = mapped_column(String(200), nullable=False)
     # Best-effort link to a RESURGAM-imported Datastore matching
@@ -40,4 +41,20 @@ class SyncJob(Base, UUIDPrimaryKeyMixin):
     schedule: Mapped[str | None] = mapped_column(String(255), nullable=True)
     remove_vanished: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # ADR 0032: what decides where a copy lands. `pull` copies remote ->
+    # local, `push` (PBS 3.3+) local -> remote; `local_ns`/`remote_ns` are
+    # PBS's `ns`/`remote-ns`, `max_depth` its namespace recursion (null =
+    # full), `group_filter` its raw filter strings, `transfer_last` its
+    # "only the last N snapshots per group" limit.
+    sync_direction: Mapped[str] = mapped_column(String(10), nullable=False, default="pull", server_default="pull")
+    local_ns: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    remote_ns: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    max_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    group_filter: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    transfer_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The remote's address from PBS's `/config/remote`, used to find the
+    # connected PBS instance on the other side (fingerprint first).
+    remote_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    remote_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remote_fingerprint: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

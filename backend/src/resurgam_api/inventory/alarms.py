@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from resurgam_api.api.v1.datastores import get_datastore_assignment
 from resurgam_api.auth.scope import effective_group_customer_id
 from resurgam_api.instant_recovery import lifecycle as ir_lifecycle
+from resurgam_api.inventory.backup_gaps import compute_guest_gaps, compute_offsite_gaps
+from resurgam_api.inventory.offsite import OffsiteStatus, lag_thresholds, offsite_severity
 from resurgam_api.inventory.protection import evaluate_protection_status
 from resurgam_api.inventory.usage import (
     FORECAST_CRITICAL_DAYS,
@@ -65,6 +67,13 @@ class AlarmType(str, Enum):
     # a stored key has no confirmed copy outside RESURGAM.
     ENCRYPTION_KEY_MISSING = "encryption_key_missing"
     ENCRYPTION_KEY_COPY_UNCONFIRMED = "encryption_key_copy_unconfirmed"
+    # ADR 0032: 3-2-1 gaps. One alarm per PVE cluster / per source datastore
+    # and customer, not per VM, so a missing sync job doesn't flood the list.
+    GUEST_NOT_BACKED_UP = "guest_not_backed_up"
+    OFFSITE_COPY_MISSING = "offsite_copy_missing"
+    OFFSITE_COPY_LAGGING_CRITICAL = "offsite_copy_lagging_critical"
+    OFFSITE_COPY_LAGGING_WARNING = "offsite_copy_lagging_warning"
+    OFFSITE_COPY_GAP = "offsite_copy_gap"
 
 
 class AlarmSeverity(str, Enum):
@@ -367,6 +376,86 @@ def _key_store_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[Alarm
     return alarms
 
 
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def _backup_gap_alarms(db: Session, visible: set[uuid.UUID] | None, now: datetime) -> list[AlarmOut]:
+    alarms: list[AlarmOut] = []
+    if visible is None:
+        by_cluster: dict[uuid.UUID, list[str]] = {}
+        for item in compute_guest_gaps(db, now):
+            if item.exception is None:
+                by_cluster.setdefault(item.gap.pve_cluster_id, []).append(
+                    f"{item.gap.vmid}" + (f" ({item.gap.name})" if item.gap.name else "")
+                )
+        for cluster_id, guests in by_cluster.items():
+            cluster = db.get(PveCluster, cluster_id)
+            shown = ", ".join(guests[:5]) + (", ..." if len(guests) > 5 else "")
+            alarms.append(
+                AlarmOut(
+                    type=AlarmType.GUEST_NOT_BACKED_UP.value,
+                    severity=AlarmSeverity.WARNING.value,
+                    customer_id=None,
+                    message=(
+                        f"{cluster.display_name if cluster else '?'}: {_plural(len(guests), 'guest')} "
+                        f"in no enabled backup job: {shown}"
+                    ),
+                    entity_type="pve_cluster",
+                    entity_id=cluster_id,
+                )
+            )
+
+    warning_hours, critical_hours = lag_thresholds(db)
+    # (alarm type, datastore, customer) -> workload labels
+    buckets: dict[tuple[AlarmType, uuid.UUID, uuid.UUID | None], list[str]] = {}
+    for gap in compute_offsite_gaps(db, visible, now):
+        severity = offsite_severity(
+            gap.status, gap.evaluation.lag_hours, warning_hours, critical_hours, dr_required=gap.evaluation.dr_required
+        )
+        if severity is None:
+            continue
+        if gap.status == OffsiteStatus.MISSING:
+            alarm_type = AlarmType.OFFSITE_COPY_MISSING
+        elif gap.status == OffsiteStatus.LAGGING:
+            alarm_type = (
+                AlarmType.OFFSITE_COPY_LAGGING_CRITICAL
+                if severity == "critical"
+                else AlarmType.OFFSITE_COPY_LAGGING_WARNING
+            )
+        else:
+            alarm_type = AlarmType.OFFSITE_COPY_GAP
+        group = gap.evaluation.group
+        buckets.setdefault((alarm_type, group.datastore_id, gap.customer_id), []).append(
+            group.resolved_name or f"{group.backup_type}/{group.backup_id}"
+        )
+
+    texts = {
+        AlarmType.OFFSITE_COPY_MISSING: "no offsite copy arrived",
+        AlarmType.OFFSITE_COPY_LAGGING_CRITICAL: f"offsite copy more than {critical_hours} h behind",
+        AlarmType.OFFSITE_COPY_LAGGING_WARNING: f"offsite copy more than {warning_hours} h behind",
+        AlarmType.OFFSITE_COPY_GAP: "no checked offsite copy (same PBS only, target not connected, or no sync job though the policy requires Sync/DR)",
+    }
+    for (alarm_type, datastore_id, customer_id), labels in buckets.items():
+        datastore = db.get(Datastore, datastore_id)
+        shown = ", ".join(sorted(labels)[:5]) + (", ..." if len(labels) > 5 else "")
+        critical = alarm_type in (AlarmType.OFFSITE_COPY_MISSING, AlarmType.OFFSITE_COPY_LAGGING_CRITICAL)
+        alarms.append(
+            AlarmOut(
+                type=alarm_type.value,
+                severity=(AlarmSeverity.CRITICAL if critical else AlarmSeverity.WARNING).value,
+                customer_id=customer_id,
+                message=(
+                    f"{datastore.name if datastore else '?'}: {_plural(len(labels), 'workload')} "
+                    f"with {texts[alarm_type]}: {shown}"
+                ),
+                entity_type="datastore",
+                entity_id=datastore_id,
+            )
+        )
+    return alarms
+
+
 def _attach_customer_names(db: Session, alarms: list[AlarmOut]) -> None:
     """Every alarm carries a bare `customer_id` from the two collectors
     above; this resolves each to a display name + the three-letter
@@ -401,6 +490,7 @@ def compute_alarms(db: Session, visible: set[uuid.UUID] | None) -> list[AlarmOut
         + _instant_recovery_alarms(db, visible, now)
         + _encryption_alarms(db, visible)
         + _key_store_alarms(db, visible)
+        + _backup_gap_alarms(db, visible, now)
     )
     _attach_customer_names(db, alarms)
     return alarms

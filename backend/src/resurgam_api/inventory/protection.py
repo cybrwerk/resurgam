@@ -15,8 +15,8 @@ def evaluate_protection_status(
     No policy assigned means there is nothing to evaluate against, so the
     status is UNKNOWN rather than a default pass — an unmonitored system
     must not look identical to a healthy one. `sync_dr_required` on the
-    policy is intentionally not evaluated here; it stays inert until
-    Sync-/DR-Status (EPIC 6) exists to report against.
+    policy is not evaluated here: it decides whether a group without any
+    sync job is an offsite gap (`inventory/offsite.py`, ADR 0032).
     """
     if policy is None:
         return ProtectionStatus.UNKNOWN
