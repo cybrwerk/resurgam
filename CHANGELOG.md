@@ -4,7 +4,11 @@ Release notes for RESURGAM appliance releases. One `## <version>` section per re
 first -- `appliance/release/build-bundle.sh` copies the section for the version in `VERSION` into
 the signed update bundle, where the appliance's Updates page shows it before you apply it.
 
-## Unreleased
+## 0.3.2
+
+Monitoring, capacity and 3-2-1 on top of 0.3.1: a Zabbix template, a "full in N days" forecast, 3-2-1
+gap detection, S3-backed datastores and a one-line installer for Proxmox VE. Update from 0.3.1 in
+System Settings -> Updates (upload the bundle, or let the update source find it on GitHub).
 
 - **Zabbix monitoring**: a ready-made Zabbix 7.0 template, "RESURGAM by HTTP" -- API availability,
   usage of every datastore (warning at 80 %, high at 90 %, and when RESURGAM stops measuring), and
@@ -13,20 +17,48 @@ the signed update bundle, where the appliance's Updates page shows it before you
   template with this appliance's address filled in, and lists every value to enter in Zabbix. Manual
   section "Zabbix monitoring". API: `GET /zabbix/setup`, `/zabbix/template`, `/zabbix/ca-certificate`;
   `/zabbix/datastores/usage` now also returns `age_seconds`.
+- **Capacity forecast**: Reporting → Capacity & Trends shows each datastore's net growth per day
+  (last 30 days, after prune and garbage collection) and when it will be full. New alarm *datastore
+  full soon* (warning at 30 days, critical at 14), not raised when the usage alarm already says the
+  same. Zabbix gets `growth_bytes_per_day` and `days_until_full` with "full within weeks/days"
+  triggers (template 0.3-2). Manual section "Capacity forecast". API: `forecast` on
+  `GET /datastores/{id}/usage`.
+- **Fix: usage history froze.** `GET /datastores/{id}/usage` returned the *oldest* 500 measurements,
+  so with the default 15-minute sync the latest values and the 24 h / 30 day change figures stopped
+  moving after about 5 days. It now returns the newest 500 and looks up the baselines separately.
+- **3-2-1 gaps** (ADR 0032): new page Reporting → 3-2-1 Gaps.
+  - *Unprotected guests*: PVE guests no backup job covers, or only a disabled one (from PVE's own
+    "not backed up" list plus each job's guest list). Alarm *guest not backed up*, one per cluster.
+  - *Offsite copies*: for every workload, whether its copy on another PBS is current, behind or
+    missing, following the PBS sync jobs (pull and push, namespaces, `max-depth`, group filters).
+    Thresholds default to 36 h (warning) and 72 h (critical). A workload without any sync job raises
+    an alarm only when its protection policy requires Sync/DR.
+  - Intended gaps can be accepted by a platform admin with a reason and an optional end date. The
+    history is kept, never edited, and shown to auditors.
+  - The Recovery Evidence report's "1 offsite" leg now uses this per-workload result. Before, it
+    counted any sync job on the datastore as offsite protection.
+  - Zabbix gets 3-2-1 items (unprotected guests, offsite gaps, largest lag) with triggers. The collector now also lists push sync jobs and local
+    sync jobs (a local sync job made the collector fail before).
 - **S3-backed datastores** (PBS 4.x, ADR 0033): RESURGAM recognizes datastores in an S3 object store
-  and shows bucket and endpoint. They count as offsite for 3-2-1 -- a copy into one is an offsite copy
-  even on the same PBS, a backup stored on one shows "Stored in S3" -- unless a platform admin marks
-  the endpoint on site, with a reason (3-2-1 Gaps → S3 endpoints, audited). Capacity: PBS reports the
-  local cache filesystem as an S3 datastore's usage; RESURGAM now labels it as the cache, shows the data
-  in the bucket (from the last garbage collection) and the S3 traffic of the last 30 days, and no longer
-  forecasts a "full" date or raises "full soon" alarms for it. The per-GB billing estimate uses the
-  bucket size. Before, the cache disk was shown as the datastore's size. Pricing plans get an own,
-  optional price per GB in S3 (`price_per_s3_gb_month`); left empty, S3 data is not charged (for an S3
-  provider paid some other way). Billing reports the S3 share as `estimated_s3_bytes`.
-- **3-2-1 Gaps** no longer lists backup groups on a datastore that was removed from PBS (they were
-  still shown, a group on a removed S3 datastore even as "Stored in S3"). API: `GET /s3-endpoints`,
-  `PUT /s3-endpoints/{id}/location`; new S3 fields on datastores, usage measurements and the Zabbix
-  datastore payloads.
+  and shows bucket and endpoint.
+  - They count as offsite for 3-2-1: a copy into one is an offsite copy even on the same PBS, and a
+    backup stored on one shows "Stored in S3". A platform admin can mark an endpoint as on-site, with
+    a reason (3-2-1 Gaps → S3 endpoints, audited).
+  - Capacity: PBS reports the local cache filesystem as an S3 datastore's usage. RESURGAM now labels
+    it as the cache, shows the data in the bucket (from the last garbage collection) and the S3
+    traffic of the last 30 days, and does not forecast a "full" date for it. Before, the cache disk was
+    shown as the datastore's size.
+  - Billing: the per-GB estimate uses the bucket size. Pricing plans get an own, optional price per GB
+    in S3 (`price_per_s3_gb_month`); left empty, S3 data is not charged (for an S3 provider paid some
+    other way). Billing reports the S3 share as `estimated_s3_bytes`.
+  - API: `GET /s3-endpoints`, `PUT /s3-endpoints/{id}/location`; new S3 fields on datastores, usage
+    measurements and the Zabbix datastore payloads.
+- **One-line installer for Proxmox VE**: run
+  `bash -c "$(curl -fsSL https://raw.githubusercontent.com/cybrwerk/resurgam/main/appliance/pve-install.sh)"`
+  as root on a PVE node. It asks for VM ID, storage, bridge or SDN VNet, VLAN, DHCP or static address
+  and size, downloads the release image, checks it against `SHA256SUMS`, creates the VM and waits until
+  RESURGAM answers. `--yes` with `RESURGAM_*` variables runs it unattended. README section "Quick
+  install".
 
 ## 0.3.1
 
