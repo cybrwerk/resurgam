@@ -78,6 +78,7 @@ def create_pricing_plan(
         price_per_ct_month=body.price_per_ct_month,
         price_per_host_month=body.price_per_host_month,
         price_per_gb_month=body.price_per_gb_month,
+        price_per_s3_gb_month=body.price_per_s3_gb_month,
         currency=body.currency,
     )
     db.add(plan)

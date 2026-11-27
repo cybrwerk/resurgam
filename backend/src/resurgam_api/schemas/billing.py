@@ -15,6 +15,10 @@ class CustomerBillingOut(BaseModel):
     estimated_physical_bytes: int = Field(
         description="Estimated total physical storage used, across primary and offsite copies."
     )
+    estimated_s3_bytes: int = Field(
+        description="The part of estimated_physical_bytes that lies in S3-backed datastores (ADR 0033). It is "
+        "charged at price_per_s3_gb_month, or not at all when that is null; the rest at price_per_gb_month."
+    )
     physical_bytes_estimate_complete: bool = Field(
         description="False if any backup group's size could not be determined (e.g. no snapshots yet, or an S3-backed datastore on which no garbage collection has run yet -- its bucket size comes from the last GC, ADR 0033), meaning estimated_physical_bytes is a partial figure."
     )
@@ -30,7 +34,10 @@ class CustomerBillingOut(BaseModel):
     )
     price_per_host_month: Decimal | None = Field(description="Monthly price per billable host, from the applied plan.")
     price_per_gb_month: Decimal | None = Field(
-        description="Monthly price per GB of estimated_physical_bytes, from the applied plan."
+        description="Monthly price per GB of estimated_physical_bytes outside S3 (i.e. minus estimated_s3_bytes), from the applied plan."
+    )
+    price_per_s3_gb_month: Decimal | None = Field(
+        description="Monthly price per GB of estimated_s3_bytes, from the applied plan. Null when no plan is applied or the plan does not charge S3 data (e.g. the S3 provider is paid some other way)."
     )
     currency: str | None = Field(description="Currency code for the price fields, from the applied plan.")
     estimated_monthly_cost: Decimal | None = Field(

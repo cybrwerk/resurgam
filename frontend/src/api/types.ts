@@ -1423,6 +1423,8 @@ export interface PricingPlanOut {
   price_per_ct_month: string;
   price_per_host_month: string;
   price_per_gb_month: string;
+  /** ADR 0033: own, optional price for S3 data; null = not charged. */
+  price_per_s3_gb_month: string | null;
   currency: string;
   created_at: string;
 }
@@ -1434,6 +1436,7 @@ export interface PricingPlanCreateRequest {
   price_per_ct_month?: string;
   price_per_host_month?: string;
   price_per_gb_month: string;
+  price_per_s3_gb_month?: string | null;
   currency?: string;
 }
 
@@ -1443,6 +1446,7 @@ export interface PricingPlanUpdateRequest {
   price_per_ct_month?: string;
   price_per_host_month?: string;
   price_per_gb_month?: string;
+  price_per_s3_gb_month?: string | null;
   currency?: string;
 }
 
@@ -1469,6 +1473,7 @@ export interface CustomerBillingOut {
   ct_count: number;
   host_count: number;
   estimated_physical_bytes: number;
+  estimated_s3_bytes: number;
   physical_bytes_estimate_complete: boolean;
   pricing_plan_id: string | null;
   pricing_plan_source: PricingPlanSource | null;
@@ -1476,6 +1481,7 @@ export interface CustomerBillingOut {
   price_per_ct_month: string | null;
   price_per_host_month: string | null;
   price_per_gb_month: string | null;
+  price_per_s3_gb_month: string | null;
   currency: string | null;
   estimated_monthly_cost: string | null;
 }

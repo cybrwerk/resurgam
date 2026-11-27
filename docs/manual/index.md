@@ -776,6 +776,12 @@ bucket. RESURGAM therefore:
 **Billing.** The per-GB estimate uses the bucket size for S3 datastores. Until a GC has run, their
 groups are left out and the estimate is marked incomplete.
 
+S3 data has its own price: *Price per GB in S3/month* on the pricing plan (`price_per_s3_gb_month`).
+It is optional. Left empty, S3 data is shown but not charged, for the case where the S3 provider is
+paid some other way (the customer pays it directly, or it is part of a flat fee). It never falls back to
+the normal per-GB price. The billing response and CSV show the S3 share as `estimated_s3_bytes`
+(included in `estimated_physical_bytes`); the normal per-GB price applies to the rest.
+
 RESURGAM only reads from PBS for this (`/config/s3`, the datastore status); the standard RESURGAM token
 is enough.
 
@@ -818,6 +824,9 @@ curl -X POST localhost:8000/api/v1/pricing-plans -H "Authorization: Bearer $TOKE
   -d '{"customer_id":null,"name":"Standard","price_per_vm_month":"10.00","price_per_ct_month":"4.00","price_per_host_month":"2.50","price_per_gb_month":"0.05","currency":"CHF"}'
 curl -X POST localhost:8000/api/v1/pricing-plans -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"customer_id":"<customer-uuid>","name":"Enterprise","price_per_vm_month":"8.00","price_per_gb_month":"0.04","currency":"CHF"}'
+# Optional own price for data in S3-backed datastores (null/omitted = not charged):
+curl -X PATCH localhost:8000/api/v1/pricing-plans/<plan-id> -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"price_per_s3_gb_month":"0.02"}'
 ```
 
 At most one global plan and one plan per customer are enforced at the database level. `GET /datastores/{id}/backup-groups` now filters per group by its *effective* customer (its own override, or the datastore's) rather than requiring the whole datastore be in scope — a shared datastore can show a customer-scoped viewer only their own groups.

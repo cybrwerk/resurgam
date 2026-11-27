@@ -20,7 +20,9 @@ the signed update bundle, where the appliance's Updates page shows it before you
   local cache filesystem as an S3 datastore's usage; RESURGAM now labels it as the cache, shows the data
   in the bucket (from the last garbage collection) and the S3 traffic of the last 30 days, and no longer
   forecasts a "full" date or raises "full soon" alarms for it. The per-GB billing estimate uses the
-  bucket size. Before, the cache disk was shown as the datastore's size. API: `GET /s3-endpoints`,
+  bucket size. Before, the cache disk was shown as the datastore's size. Pricing plans get an own,
+  optional price per GB in S3 (`price_per_s3_gb_month`); left empty, S3 data is not charged (for an S3
+  provider paid some other way). Billing reports the S3 share as `estimated_s3_bytes`. API: `GET /s3-endpoints`,
   `PUT /s3-endpoints/{id}/location`; new S3 fields on datastores, usage measurements and the Zabbix
   datastore payloads.
 

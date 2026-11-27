@@ -387,3 +387,59 @@ def test_billing_uses_bucket_size_for_s3(client, platform_admin_headers, db_sess
     body = client.get(f"/api/v1/billing/customers/{customer}", headers=platform_admin_headers).json()
     assert body["physical_bytes_estimate_complete"] is True
     assert body["estimated_physical_bytes"] == 400
+    assert body["estimated_s3_bytes"] == 400
+
+
+def test_s3_data_has_its_own_optional_price(client, platform_admin_headers, db_session, monkeypatch):
+    a = _create_pbs_instance(client, platform_admin_headers, "Site A", "pbs-a.example")
+    fs = _import_datastore(client, platform_admin_headers, a, monkeypatch, "local")
+    s3 = _import_datastore(client, platform_admin_headers, a, monkeypatch, "s3-test")
+    _make_s3(db_session, s3)
+    customer = _create_customer(db_session, "acme")
+    _assign(db_session, fs, customer)
+    _assign(db_session, s3, customer)
+    from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
+
+    for store, backup_id in ((fs, "1"), (s3, "2")):
+        group = BackupGroup(datastore_id=uuid.UUID(store), backup_type="vm", backup_id=backup_id, namespace="")
+        db_session.add(group)
+        db_session.flush()
+        db_session.add(BackupSnapshot(backup_group_id=group.id, snapshot_time=NOW, size_bytes=10_000_000_000))
+    db_session.commit()
+    # 10 GB logical on each; the filesystem store holds 4 GB, the bucket 2 GB.
+    _measure(db_session, fs, NOW, used_bytes=4_000_000_000, logical_bytes=10_000_000_000)
+    _measure(db_session, s3, NOW, used_bytes=900_000, logical_bytes=10_000_000_000, s3_data_bytes=2_000_000_000)
+
+    plan = client.post(
+        "/api/v1/pricing-plans",
+        json={"name": "Std", "price_per_vm_month": "0", "price_per_gb_month": "1.0000"},
+        headers=platform_admin_headers,
+    ).json()
+    assert plan["price_per_s3_gb_month"] is None
+
+    # No S3 price: the bucket's 2 GB are shown but not charged.
+    body = client.get(f"/api/v1/billing/customers/{customer}", headers=platform_admin_headers).json()
+    assert body["estimated_physical_bytes"] == 6_000_000_000
+    assert body["estimated_s3_bytes"] == 2_000_000_000
+    assert body["price_per_s3_gb_month"] is None
+    assert body["estimated_monthly_cost"] == "4.00"
+
+    updated = client.patch(
+        f"/api/v1/pricing-plans/{plan['id']}", json={"price_per_s3_gb_month": "0.2500"}, headers=platform_admin_headers
+    )
+    assert updated.status_code == 200
+    body = client.get(f"/api/v1/billing/customers/{customer}", headers=platform_admin_headers).json()
+    assert body["estimated_monthly_cost"] == "4.50"
+
+    csv_text = client.get("/api/v1/billing/customers/export", headers=platform_admin_headers).text
+    header, row = csv_text.splitlines()[:2]
+    columns = dict(zip(header.split(","), row.split(","), strict=True))
+    assert columns["estimated_s3_bytes"] == "2000000000"
+    assert columns["price_per_s3_gb_month"] == "0.2500"
+
+    # Back to "not charged".
+    client.patch(
+        f"/api/v1/pricing-plans/{plan['id']}", json={"price_per_s3_gb_month": None}, headers=platform_admin_headers
+    )
+    body = client.get(f"/api/v1/billing/customers/{customer}", headers=platform_admin_headers).json()
+    assert body["estimated_monthly_cost"] == "4.00"

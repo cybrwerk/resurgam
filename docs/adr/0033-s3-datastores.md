@@ -74,6 +74,11 @@ The live test showed what goes wrong:
 5. **Billing.** For an S3 datastore the dedup ratio uses `s3_data_bytes`. Until a GC has run, its groups
    are left out and `physical_bytes_estimate_complete` is false, which is honest rather than estimated
    from the cache.
+   - S3 data has its own price on the pricing plan, `price_per_s3_gb_month` (user, 2026-11-27: "an own
+     price and optional, as the S3 provider could be paid otherwise"). Null = not charged per GB; it
+     never falls back to `price_per_gb_month`.
+   - The billing output reports the S3 share as `estimated_s3_bytes` (part of
+     `estimated_physical_bytes`), so the rest is charged at the normal per-GB price. Migration 0075.
 6. **Zabbix.**
    - Datastore discovery gets `{#DATASTORE_BACKEND}`. The usage payload gets `backend_type` and
      `s3_data_bytes`.

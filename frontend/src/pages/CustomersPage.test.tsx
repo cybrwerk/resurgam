@@ -60,6 +60,7 @@ function setup(customers: CustomerOut[]) {
     ct_count: 0,
     host_count: 0,
     estimated_physical_bytes: 0,
+    estimated_s3_bytes: 0,
     physical_bytes_estimate_complete: true,
     pricing_plan_id: null,
     pricing_plan_source: null,
@@ -67,6 +68,7 @@ function setup(customers: CustomerOut[]) {
     price_per_ct_month: null,
     price_per_host_month: null,
     price_per_gb_month: null,
+    price_per_s3_gb_month: null,
     currency: null,
     estimated_monthly_cost: null,
   });

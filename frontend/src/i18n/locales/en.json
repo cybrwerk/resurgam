@@ -1150,7 +1150,11 @@
     "pricePerGb": "Price per GB/month",
     "currency": "Currency",
     "confirmDeleteTitle": "Delete pricing plan",
-    "confirmDeleteBody": "\"{{name}}\" will be removed."
+    "confirmDeleteBody": "\"{{name}}\" will be removed.",
+    "pricePerS3Gb": "Price per GB in S3/month",
+    "pricePerS3GbPlaceholder": "Not charged",
+    "pricePerS3GbHint": "Optional. Data in S3-backed datastores is charged at this price instead of the per-GB price above. Leave empty if the S3 provider is paid some other way.",
+    "s3NotCharged": "Not charged"
   },
   "syncJobs": {
     "title": "Configured Sync Jobs",
@@ -1171,7 +1175,9 @@
     "pricingPlanGlobal": "Global default",
     "pricingPlanCustomer": "Tenant override",
     "estimatedMonthlyCost": "Estimated monthly cost",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "s3Part": "incl. {{size}} in S3",
+    "s3PartNotCharged": "incl. {{size}} in S3 (not charged)"
   },
   "recoveryEvidence": {
     "title": "Report Center",

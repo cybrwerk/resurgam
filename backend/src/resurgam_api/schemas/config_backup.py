@@ -290,7 +290,10 @@ class PricingPlanEntry(BaseModel):
     price_per_vm_month: Decimal = Field(ge=0, description="Per-VM monthly price.")
     price_per_ct_month: Decimal = Field(default=Decimal(0), ge=0, description="Per-container monthly price.")
     price_per_host_month: Decimal = Field(default=Decimal(0), ge=0, description="Per-host monthly price.")
-    price_per_gb_month: Decimal = Field(ge=0, description="Per-GB monthly price.")
+    price_per_gb_month: Decimal = Field(ge=0, description="Per-GB monthly price (filesystem datastores).")
+    price_per_s3_gb_month: Decimal | None = Field(
+        default=None, ge=0, description="Per-GB monthly price for S3-backed datastores; null = not charged."
+    )
     currency: str = Field(default="CHF", min_length=3, max_length=3, description="ISO currency code.")
 
 
