@@ -213,7 +213,9 @@ def offsite_object_stores(db: Session) -> dict[uuid.UUID, str]:
     not synced yet is offsite too -- the rule is "offsite unless marked"."""
     endpoints = {(e.pbs_instance_id, e.name): e for e in db.query(PbsS3Endpoint).all()}
     result: dict[uuid.UUID, str] = {}
-    for datastore in db.query(Datastore).filter(Datastore.backend_type == "s3").all():
+    for datastore in (
+        db.query(Datastore).filter(Datastore.backend_type == "s3", Datastore.removed_from_pbs_at.is_(None)).all()
+    ):
         endpoint = endpoints.get((datastore.pbs_instance_id, datastore.s3_endpoint_name))
         if endpoint is not None and endpoint.on_site:
             continue

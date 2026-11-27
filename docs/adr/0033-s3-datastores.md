@@ -86,6 +86,18 @@ The live test showed what goes wrong:
    - The usage-percent triggers keep firing for S3, consistent with the cache-disk alarm above.
    - The template itself is unchanged.
 
+## Live verification (2026-11-27, PBS 4.2.14 + RustFS 1.0.7, test setup removed afterwards)
+
+- Backend, bucket and endpoint detected; a local sync job into the S3 datastore rated `ok` with the
+  bucket as copy location.
+- After one GC: `gc-status.disk-bytes` = 84 417 301, stored as `s3_data_bytes` (PBS uploaded
+  84 430 550 bytes); the billing estimate used it, with and without an S3 price.
+- After removing sync job, datastore and endpoint on PBS: the datastore and endpoint got
+  `removed_from_pbs_at`. This showed a bug: the group on the removed datastore still counted as
+  `stored_offsite` (the collector marks the datastore removed, not its groups). 3-2-1 now ignores
+  groups on removed datastores, and a removed S3 datastore is no longer an offsite target. The same
+  fix applies to filesystem datastores (ADR 0032).
+
 ## Consequences
 
 - RESURGAM never writes to PBS for any of this; every call is a GET its audit token may already make.

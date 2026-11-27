@@ -443,3 +443,30 @@ def test_s3_data_has_its_own_optional_price(client, platform_admin_headers, db_s
     )
     body = client.get(f"/api/v1/billing/customers/{customer}", headers=platform_admin_headers).json()
     assert body["estimated_monthly_cost"] == "4.00"
+
+
+def test_group_on_removed_s3_datastore_is_not_counted(client, platform_admin_headers, db_session, monkeypatch):
+    """Live finding 2026-11-27: after the S3 datastore was removed on PBS, its
+    group still showed as "Stored in S3"."""
+    from resurgam_api.models.datastore import Datastore
+    from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
+
+    a = _create_pbs_instance(client, platform_admin_headers, "Site A", "pbs-a.example")
+    s3 = _import_datastore(client, platform_admin_headers, a, monkeypatch, "s3-test")
+    _make_s3(db_session, s3)
+    group = BackupGroup(datastore_id=uuid.UUID(s3), backup_type="ct", backup_id="1121", namespace="")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add(BackupSnapshot(backup_group_id=group.id, snapshot_time=NOW, size_bytes=1))
+    db_session.commit()
+
+    def statuses():
+        from resurgam_api.inventory.backup_gaps import compute_offsite_gaps
+
+        db_session.expire_all()
+        return {g.evaluation.group.id: g.evaluation.status.value for g in compute_offsite_gaps(db_session, None, NOW)}
+
+    assert statuses()[group.id] == "stored_offsite"
+    db_session.get(Datastore, uuid.UUID(s3)).removed_from_pbs_at = NOW
+    db_session.commit()
+    assert group.id not in statuses()

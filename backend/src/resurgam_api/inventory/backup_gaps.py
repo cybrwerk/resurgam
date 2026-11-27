@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from resurgam_api.auth.scope import effective_group_customer_id
 from resurgam_api.inventory.offsite import OffsiteEvaluation, OffsiteStatus, evaluate_offsite
 from resurgam_api.models.backup_gaps import BackupGapException, GapExceptionKind, PveGuestBackupGap
-from resurgam_api.models.datastore import DatastoreCustomerAssignment
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
 from resurgam_api.models.inventory import BackupGroup
 from resurgam_api.models.leg_applicability import ThreeTwoOneOneZeroLegSetting
 
@@ -118,9 +118,16 @@ def compute_offsite_gaps(
     to `visible` customers (`None` = platform admin, everything). Copy edges
     and copy detection always look at all groups, so a tenant's view doesn't
     change what counts as a copy."""
+    # A group on a datastore that was removed from PBS is not a current backup,
+    # even though the collector leaves the group itself unmarked.
     all_current = (
         db.query(BackupGroup)
-        .filter(BackupGroup.superseded_at.is_(None), BackupGroup.removed_from_pbs_at.is_(None))
+        .join(Datastore, Datastore.id == BackupGroup.datastore_id)
+        .filter(
+            BackupGroup.superseded_at.is_(None),
+            BackupGroup.removed_from_pbs_at.is_(None),
+            Datastore.removed_from_pbs_at.is_(None),
+        )
         .all()
     )
     evaluations, _copies = evaluate_offsite(db, all_current, now)
