@@ -60,4 +60,50 @@ describe("CapacityTrendsPage", () => {
     expect(screen.getByText("Not growing")).toBeInTheDocument();
     expect(screen.getByText("Not enough history (3/7 days)")).toBeInTheDocument();
   });
+
+  it("shows bucket size, cache usage and traffic for an S3 datastore", async () => {
+    vi.mocked(customersApi.list).mockResolvedValue([]);
+    vi.mocked(datastoresApi.list).mockResolvedValue([
+      { ...datastore("ds-s3", "s3-test"), backend_type: "s3", s3_bucket: "pbs-test", s3_endpoint_host: "127.0.0.1" },
+    ]);
+    vi.mocked(datastoresApi.usage).mockResolvedValue({
+      ...usage({ status: "not_applicable", basis_days: 0, growth_bytes_per_day: null, days_until_full: null, full_at: null }),
+      backend_type: "s3",
+      latest: {
+        id: "m-1",
+        datastore_id: "ds-s3",
+        captured_at: "2026-11-27T10:00:00Z",
+        used_bytes: 36 * 1024 ** 3,
+        available_bytes: 7 * 1024 ** 3,
+        total_bytes: 45 * 1024 ** 3,
+        logical_bytes: 0,
+        usage_percent: 78.8,
+        group_count_vm: 0,
+        group_count_ct: 1,
+        group_count_host: 0,
+        snapshot_count: 1,
+        oldest_snapshot_at: null,
+        newest_snapshot_at: null,
+        last_successful_gc_at: null,
+        s3_data_bytes: null,
+      },
+      s3_traffic_30d: {
+        s3_get_requests: 1,
+        s3_put_requests: 81,
+        s3_post_requests: 0,
+        s3_head_requests: 2,
+        s3_delete_requests: 0,
+        s3_uploaded_bytes: 80 * 1024 ** 2,
+        s3_downloaded_bytes: 0,
+      },
+    });
+
+    renderWithProviders(<CapacityTrendsPage />);
+
+    await waitFor(() => expect(screen.getByText("No fixed size (S3)")).toBeInTheDocument());
+    expect(screen.getByText("pbs-test @ 127.0.0.1")).toBeInTheDocument();
+    expect(screen.getByText("Bucket size known after the first garbage collection")).toBeInTheDocument();
+    expect(screen.getByText("Cache 78.8% (36.0 GB / 45.0 GB)")).toBeInTheDocument();
+    expect(screen.getByText("30 d: ↑ 80.0 MB · ↓ 0 B · 84 requests")).toBeInTheDocument();
+  });
 });

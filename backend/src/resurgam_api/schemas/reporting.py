@@ -232,8 +232,9 @@ class OffsiteStatusEntryOut(BaseModel):
         description="Whether an offsite copy of this workload's backups exists (on another PBS, or on a datastore "
         "with role 'offsite'), whether current or behind -- see `status` and `lag_hours`."
     )
-    offsite_method: Literal["datastore_role", "sync_job", "exception", "none"] = Field(
-        description="How the offsite copy is achieved: a PBS sync job copies it ('sync_job'), an operator accepted "
+    offsite_method: Literal["datastore_role", "sync_job", "s3_datastore", "exception", "none"] = Field(
+        description="How the offsite copy is achieved: a PBS sync job copies it ('sync_job'), the backup itself is "
+        "stored on an S3-backed datastore that counts as offsite ('s3_datastore', ADR 0033), an operator accepted "
         "the gap with a reason ('exception', see `exception_reason`), or none. 'datastore_role' only appears in "
         "reports generated before RESURGAM 0.3.2."
     )
@@ -246,6 +247,7 @@ class OffsiteStatusEntryOut(BaseModel):
     status: (
         Literal[
             "ok",
+            "stored_offsite",
             "lagging",
             "missing",
             "local_copy_only",

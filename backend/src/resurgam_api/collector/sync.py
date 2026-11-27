@@ -6,21 +6,23 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from resurgam_api.config import Settings
-from resurgam_api.connectivity.models import RemoteDatastoreUsage, RemoteSnapshot, TrustConfig
+from resurgam_api.connectivity.models import RemoteDatastoreUsage, RemoteSnapshot, S3Statistics, TrustConfig
 from resurgam_api.connectivity.pbs_api import (
     get_group_notes,
+    get_s3_statistics,
     get_server_timezone,
     list_acl_entries,
     list_datastore_usage,
     list_datastores,
     list_remotes,
+    list_s3_endpoints,
     list_snapshots,
     list_sync_jobs,
     list_tasks,
 )
 from resurgam_api.connectivity.pve_api import list_guests
 from resurgam_api.models.audit import AuditEvent
-from resurgam_api.models.datastore import Datastore
+from resurgam_api.models.datastore import Datastore, PbsS3Endpoint
 from resurgam_api.models.file_index_entry import FileIndexEntry, not_still_linked
 from resurgam_api.models.inventory import (
     BackupGroup,
@@ -207,7 +209,11 @@ def _pve_guest_name_lookup(db: Session, settings: Settings, datastore: Datastore
 
 
 def _capture_usage_measurement(
-    db: Session, instance: PbsInstance, datastore: Datastore, remote_usage: RemoteDatastoreUsage | None
+    db: Session,
+    instance: PbsInstance,
+    datastore: Datastore,
+    remote_usage: RemoteDatastoreUsage | None,
+    s3_stats: S3Statistics | None = None,
 ) -> bool:
     """Insert one append-only `usage_measurements` row (manifest §9.3),
     or do nothing if PBS's usage listing didn't include this datastore
@@ -264,6 +270,16 @@ def _capture_usage_measurement(
             oldest_snapshot_at=oldest,
             newest_snapshot_at=newest,
             last_successful_gc_at=last_gc,
+            # ADR 0033: for an S3 datastore the bucket's data size and the
+            # S3 request/traffic counters; null for a filesystem datastore.
+            s3_data_bytes=remote_usage.gc_disk_bytes if remote_usage.backend_type == "s3" else None,
+            s3_get_requests=s3_stats.get if s3_stats else None,
+            s3_put_requests=s3_stats.put if s3_stats else None,
+            s3_post_requests=s3_stats.post if s3_stats else None,
+            s3_head_requests=s3_stats.head if s3_stats else None,
+            s3_delete_requests=s3_stats.delete if s3_stats else None,
+            s3_uploaded_bytes=s3_stats.uploaded_bytes if s3_stats else None,
+            s3_downloaded_bytes=s3_stats.downloaded_bytes if s3_stats else None,
         )
     )
     db.flush()
@@ -535,7 +551,13 @@ def sync_datastore_inventory(
     file_index_entries_purged = _purge_orphaned_file_index_entries(db, datastore, grouped)
 
     db.flush()
-    usage_captured = _capture_usage_measurement(db, instance, datastore, remote_usage)
+    s3_stats = None
+    if remote_usage is not None and remote_usage.backend_type == "s3":
+        # Not in the usage listing: one status call per S3 datastore.
+        s3_stats = get_s3_statistics(
+            instance.host, instance.port, trust, token, settings.connectivity_timeout_seconds, store=datastore.name
+        )
+    usage_captured = _capture_usage_measurement(db, instance, datastore, remote_usage, s3_stats)
     return InventorySyncResult(
         reachable=True,
         groups_created=groups_created,
@@ -609,7 +631,15 @@ def discover_datastores(db: Session, settings: Settings, instance: PbsInstance) 
     for name, remote in remote_by_name.items():
         datastore = known_by_name.get(name)
         if datastore is None:
-            datastore = Datastore(pbs_instance_id=instance.id, name=name, path=remote.path, comment=remote.comment)
+            datastore = Datastore(
+                pbs_instance_id=instance.id,
+                name=name,
+                path=remote.path,
+                comment=remote.comment,
+                backend_type=remote.backend_type,
+                s3_endpoint_name=remote.s3_endpoint,
+                s3_bucket=remote.s3_bucket,
+            )
             db.add(datastore)
             db.flush()
             result.created.append(name)
@@ -630,9 +660,15 @@ def discover_datastores(db: Session, settings: Settings, instance: PbsInstance) 
                 datastore=datastore,
                 detail={"pbs_instance_id": str(instance.id), "name": name},
             )
-        if datastore.path != remote.path or datastore.comment != remote.comment:
+        backend = (remote.backend_type, remote.s3_endpoint, remote.s3_bucket)
+        if (
+            datastore.path != remote.path
+            or datastore.comment != remote.comment
+            or (datastore.backend_type, datastore.s3_endpoint_name, datastore.s3_bucket) != backend
+        ):
             datastore.path = remote.path
             datastore.comment = remote.comment
+            datastore.backend_type, datastore.s3_endpoint_name, datastore.s3_bucket = backend
             result.updated.append(name)
 
     for name, datastore in known_by_name.items():
@@ -648,6 +684,43 @@ def discover_datastores(db: Session, settings: Settings, instance: PbsInstance) 
 
     db.flush()
     return result
+
+
+def sync_instance_s3_endpoints(db: Session, settings: Settings, instance: PbsInstance) -> bool:
+    """Reconcile `pbs_s3_endpoints` with PBS's `GET /config/s3` (ADR 0033).
+    New endpoints are added (not on-site), known ones get host/port/region
+    refreshed -- the operator's on-site mark is never touched -- and missing
+    ones get `removed_from_pbs_at`. Skipped entirely when the instance has no
+    S3 datastore (a PBS before 4.0 has no such endpoint) or PBS can't be
+    asked. Returns whether PBS answered. Only flushes."""
+    has_s3 = db.query(Datastore.id).filter_by(pbs_instance_id=instance.id, backend_type="s3").first() is not None
+    known = {e.name: e for e in db.query(PbsS3Endpoint).filter_by(pbs_instance_id=instance.id).all()}
+    if not has_s3 and not known:
+        return False
+    token = _get_token(db, settings, instance.api_token_secret_ref_id)
+    listing = list_s3_endpoints(
+        instance.host, instance.port, _trust_for(instance), token, timeout=settings.connectivity_timeout_seconds
+    )
+    if not listing.reachable:
+        return False
+    now = datetime.now(UTC)
+    seen = set()
+    for remote in listing.endpoints or []:
+        seen.add(remote.id)
+        row = known.get(remote.id)
+        if row is None:
+            row = PbsS3Endpoint(pbs_instance_id=instance.id, name=remote.id, endpoint=remote.endpoint)
+            db.add(row)
+        row.endpoint = remote.endpoint
+        row.port = remote.port
+        row.region = remote.region
+        row.path_style = remote.path_style
+        row.removed_from_pbs_at = None
+    for name, row in known.items():
+        if name not in seen and row.removed_from_pbs_at is None:
+            row.removed_from_pbs_at = now
+    db.flush()
+    return True
 
 
 def sync_instance_tasks(db: Session, settings: Settings, instance: PbsInstance) -> TaskSyncResult:
@@ -846,6 +919,12 @@ def sync_pbs_instance(db: Session, settings: Settings, instance: PbsInstance) ->
         discovery_result = discover_datastores(db, settings, instance)
     except Exception as exc:  # noqa: BLE001 - discovery failing must not abort the inventory sync
         discovery_result = DatastoreDiscoveryResult(reachable=False, error=str(exc))
+    try:
+        # Savepoint: a failure here rolls back only the endpoint rows.
+        with db.begin_nested():
+            sync_instance_s3_endpoints(db, settings, instance)
+    except Exception:  # noqa: BLE001, S110 - S3 endpoint details are informational, never abort the sync
+        pass
     tasks_result = sync_instance_tasks(db, settings, instance)
     sync_jobs_result = sync_instance_sync_jobs(db, settings, instance)
     acl_result = sync_instance_acl(db, settings, instance)

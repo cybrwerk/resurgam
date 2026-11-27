@@ -40,14 +40,22 @@ class SetDatastoreEncryptionKeyRequest(BaseModel):
 class DatastoreOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
-    pbs_instance_id: UUID
-    name: str
-    path: str | None
-    comment: str | None
-    created_at: datetime
-    customer_id: UUID | None = None
-    role: DatastoreRoleLiteral | None = None
+    id: UUID = Field(description="RESURGAM's id of the datastore.")
+    pbs_instance_id: UUID = Field(description="The PBS instance the datastore belongs to.")
+    name: str = Field(description="The datastore's name on PBS.")
+    path: str | None = Field(
+        description="Path on the PBS host as PBS reports it. For an S3 datastore this is the local cache directory."
+    )
+    comment: str | None = Field(description="The datastore's comment on PBS, if any.")
+    created_at: datetime = Field(description="When RESURGAM imported the datastore.")
+    customer_id: UUID | None = Field(
+        default=None, description="The customer the datastore is assigned to; null if none."
+    )
+    role: DatastoreRoleLiteral | None = Field(
+        default=None,
+        description="`primary` or `offsite` (a DR target: counts as offsite for 3-2-1, not counted for per-VM "
+        "billing); null while unassigned.",
+    )
     # Never the key content or even its secret reference -- matching PVE's
     # own write-only convention for a storage's encryption key (confirmed
     # live: PVE::Storage::Plugin::sensitive_properties never returns it via
@@ -86,5 +94,28 @@ class DatastoreOut(BaseModel):
             "datastore configuration (GET /config/datastore). Null while PBS still lists it. Nothing is deleted "
             "on removal -- customer assignment, inventory and usage history stay; the mark is cleared "
             "automatically if the datastore reappears on PBS. Removed datastores are skipped by the inventory sync."
+        ),
+    )
+    backend_type: str | None = Field(
+        default=None,
+        description=(
+            "PBS 4.x datastore backend (ADR 0033): `filesystem` or `s3`. Null until the Collector's datastore "
+            "discovery has run once since RESURGAM 0.3.2. For `s3`, `path` is the local cache directory and the "
+            "usage figures (GET /datastores/{id}/usage) describe that cache filesystem, not the bucket."
+        ),
+    )
+    s3_endpoint_name: str | None = Field(
+        default=None, description="S3 datastores only: the PBS S3 endpoint id the datastore uses (GET /s3-endpoints)."
+    )
+    s3_bucket: str | None = Field(default=None, description="S3 datastores only: the bucket on that endpoint.")
+    s3_endpoint_host: str | None = Field(
+        default=None,
+        description="S3 datastores only: host name or IP of the endpoint, once the Collector has read the endpoint list.",
+    )
+    s3_offsite: bool | None = Field(
+        default=None,
+        description=(
+            "S3 datastores only: whether backups here count as offsite for 3-2-1 -- true unless a platform admin "
+            "marked the endpoint on-site (PUT /s3-endpoints/{id}/location). Null for filesystem datastores."
         ),
     )

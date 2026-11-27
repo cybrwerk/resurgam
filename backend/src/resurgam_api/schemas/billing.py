@@ -16,7 +16,7 @@ class CustomerBillingOut(BaseModel):
         description="Estimated total physical storage used, across primary and offsite copies."
     )
     physical_bytes_estimate_complete: bool = Field(
-        description="False if any backup group's size could not be determined (e.g. no snapshots yet), meaning estimated_physical_bytes is a partial figure."
+        description="False if any backup group's size could not be determined (e.g. no snapshots yet, or an S3-backed datastore on which no garbage collection has run yet -- its bucket size comes from the last GC, ADR 0033), meaning estimated_physical_bytes is a partial figure."
     )
     pricing_plan_id: UUID | None = Field(
         description="The pricing plan actually applied, or null if none is configured for this customer or globally."

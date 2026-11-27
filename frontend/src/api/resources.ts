@@ -9,6 +9,8 @@ import {
   uploadRawWithProgress,
 } from "./client";
 import type {
+  S3EndpointLocationRequest,
+  S3EndpointOut,
   EncryptionKeyImportOut,
   EncryptionKeyOut,
   ZabbixSetupOut,
@@ -863,6 +865,12 @@ export const backupGapsApi = {
     apiRequest<BackupGapThresholds>("/backup-gaps/thresholds", { method: "PUT", body }),
   checkCluster: (pveClusterId: string) =>
     apiRequest<PveClusterGapCheckOut>(`/backup-gaps/pve-clusters/${pveClusterId}/check`, { method: "POST" }),
+};
+
+export const s3EndpointsApi = {
+  list: () => apiRequest<S3EndpointOut[]>("/s3-endpoints"),
+  setLocation: (id: string, body: S3EndpointLocationRequest) =>
+    apiRequest<S3EndpointOut>(`/s3-endpoints/${id}/location`, { method: "PUT", body }),
 };
 
 export const billingApi = {

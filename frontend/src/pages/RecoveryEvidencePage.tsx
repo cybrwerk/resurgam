@@ -19,6 +19,7 @@ import styles from "./RecoveryEvidencePage.module.css";
 
 const OFFSITE_STATUS_TONE: Record<OffsiteStatus, StatusTone> = {
   ok: "ok",
+  stored_offsite: "ok",
   lagging: "warning",
   missing: "danger",
   local_copy_only: "warning",

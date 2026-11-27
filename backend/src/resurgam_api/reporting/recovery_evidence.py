@@ -618,12 +618,13 @@ def compute_offsite_status(db: Session, groups: list[BackupGroup]) -> list[Offsi
     for gap in compute_offsite_gaps(db, None, now, groups=groups):
         evaluation = gap.evaluation
         exception = gap.exception
-        has_copy = evaluation.copy_backup_group_id is not None and gap.raw_status in (
-            OffsiteStatus.OK,
-            OffsiteStatus.LAGGING,
-        )
+        has_copy = (
+            evaluation.copy_backup_group_id is not None and gap.raw_status in (OffsiteStatus.OK, OffsiteStatus.LAGGING)
+        ) or gap.raw_status == OffsiteStatus.STORED_OFFSITE
         if evaluation.status == OffsiteStatus.EXCEPTED:
             method = "exception"
+        elif gap.raw_status == OffsiteStatus.STORED_OFFSITE:
+            method = "s3_datastore"
         elif evaluation.jobs:
             method = "sync_job"
         else:
@@ -648,7 +649,7 @@ def compute_offsite_status(db: Session, groups: list[BackupGroup]) -> list[Offsi
     return entries
 
 
-_OFFSITE_FINE = ("ok", "excepted", "not_required")
+_OFFSITE_FINE = ("ok", "stored_offsite", "excepted", "not_required")
 
 
 def compute_three_two_one_one_zero(

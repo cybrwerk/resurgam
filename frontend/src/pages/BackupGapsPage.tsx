@@ -4,7 +4,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { ApiError } from "../api/client";
-import { backupGapsApi } from "../api/resources";
+import { backupGapsApi, s3EndpointsApi } from "../api/resources";
 import type {
   BackupGapsOut,
   BackupGapThresholds,
@@ -13,6 +13,7 @@ import type {
   GuestGapOut,
   OffsiteGapOut,
   OffsiteStatus,
+  S3EndpointOut,
 } from "../api/types";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { InlineAlert } from "../components/InlineAlert";
@@ -34,7 +35,7 @@ function formatDateTime(value: string | null): string {
 function offsiteTone(entry: OffsiteGapOut): StatusTone {
   if (entry.severity === "critical") return "danger";
   if (entry.severity === "warning") return "warning";
-  if (entry.status === "ok") return "ok";
+  if (entry.status === "ok" || entry.status === "stored_offsite") return "ok";
   if (entry.status === "excepted") return "info";
   return "unknown";
 }
@@ -204,7 +205,7 @@ function ExceptionNote({ exception }: { exception: GapExceptionOut | null }) {
 function OffsiteSection({ data, isAdmin, onException }: { data: BackupGapsOut; isAdmin: boolean; onException: (t: ExceptionTarget) => void }) {
   const { t } = useTranslation();
   const [onlyGaps, setOnlyGaps] = useState(true);
-  const rows = onlyGaps ? data.offsite.filter((o) => o.status !== "ok" && o.status !== "not_required") : data.offsite;
+  const rows = onlyGaps ? data.offsite.filter((o) => o.status !== "ok" && o.status !== "stored_offsite" && o.status !== "not_required") : data.offsite;
 
   const statusLabel = (status: OffsiteStatus) => t(`backupGaps.status.${status}`);
   const columns: DataTableColumn<OffsiteGapOut>[] = [
@@ -405,6 +406,123 @@ function ExceptionsSection() {
   );
 }
 
+const S3_QUERY_KEY = ["s3-endpoints"];
+
+function S3LocationDialog({ endpoint, onClose }: { endpoint: S3EndpointOut; onClose: () => void }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const onSite = !endpoint.on_site;
+  const mutation = useMutation({
+    mutationFn: () => s3EndpointsApi.setLocation(endpoint.id, { on_site: onSite, reason: reason.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: S3_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["alarms"] });
+      onClose();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : t("common.loadError")),
+  });
+  return (
+    <Modal open title={onSite ? t("backupGaps.s3MarkOnSiteTitle") : t("backupGaps.s3MarkOffsiteTitle")} onClose={onClose}>
+      <p className="panelIntro">
+        {t(onSite ? "backupGaps.s3MarkOnSiteIntro" : "backupGaps.s3MarkOffsiteIntro", { endpoint: endpoint.name, host: endpoint.endpoint })}
+      </p>
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <div className="field">
+        <label className="label" htmlFor="s3-reason">
+          {t("backupGaps.reason")}
+        </label>
+        <textarea id="s3-reason" className="input" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <p className="mutedText">{t("backupGaps.reasonHint")}</p>
+      </div>
+      <div className="formActions">
+        <button type="button" className="button" onClick={onClose}>
+          {t("common.cancel")}
+        </button>
+        <button
+          type="button"
+          className="button buttonPrimary"
+          disabled={reason.trim().length < 10 || mutation.isPending}
+          onClick={() => mutation.mutate()}
+        >
+          {onSite ? t("backupGaps.s3MarkOnSite") : t("backupGaps.s3MarkOffsite")}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function S3EndpointsSection({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation();
+  const query = useQuery({ queryKey: S3_QUERY_KEY, queryFn: s3EndpointsApi.list });
+  const [editing, setEditing] = useState<S3EndpointOut | null>(null);
+  const columns: DataTableColumn<S3EndpointOut>[] = [
+    { key: "pbs", header: t("backupGaps.s3Pbs"), render: (r) => r.pbs_instance_name },
+    {
+      key: "endpoint",
+      header: t("backupGaps.s3Endpoint"),
+      render: (r) => (
+        <>
+          <div>{r.name}</div>
+          <div className="mutedText">
+            {r.endpoint}
+            {r.port ? `:${r.port}` : ""}
+            {r.region ? ` · ${r.region}` : ""}
+          </div>
+        </>
+      ),
+    },
+    { key: "datastores", header: t("backupGaps.s3Datastores"), render: (r) => (r.datastores.length ? r.datastores.join(", ") : "—") },
+    {
+      key: "location",
+      header: t("backupGaps.s3Location"),
+      render: (r) => (
+        <>
+          <StatusBadge
+            tone={r.removed_from_pbs_at ? "unknown" : r.on_site ? "warning" : "ok"}
+            label={r.removed_from_pbs_at ? t("backupGaps.s3Removed") : r.on_site ? t("backupGaps.s3OnSite") : t("backupGaps.s3Offsite")}
+          />
+          {r.on_site_reason && (
+            <div className="mutedText">
+              {r.on_site_reason} ({r.on_site_changed_by ?? "?"}, {formatDateTime(r.on_site_changed_at)})
+            </div>
+          )}
+        </>
+      ),
+    },
+    ...(isAdmin
+      ? [
+          {
+            key: "actions",
+            header: "",
+            render: (r: S3EndpointOut) => (
+              <button type="button" className="button buttonGhost" onClick={() => setEditing(r)}>
+                {r.on_site ? t("backupGaps.s3MarkOffsite") : t("backupGaps.s3MarkOnSite")}
+              </button>
+            ),
+          },
+        ]
+      : []),
+  ];
+  return (
+    <Panel testId="backup-gaps-s3" title={t("backupGaps.s3Title")} padded={false}>
+      <p className="panelIntro">{t("backupGaps.s3Intro")}</p>
+      <QueryState query={query}>
+        {(rows) =>
+          rows.length === 0 ? (
+            <p className="panelIntro mutedText">{t("backupGaps.s3Empty")}</p>
+          ) : (
+            <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
+          )
+        }
+      </QueryState>
+      {editing && <S3LocationDialog endpoint={editing} onClose={() => setEditing(null)} />}
+    </Panel>
+  );
+}
+
 function ThresholdsSection({ thresholds }: { thresholds: BackupGapThresholds }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -456,7 +574,12 @@ export function BackupGapsPage() {
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: backupGapsApi.get });
   const [target, setTarget] = useState<ExceptionTarget | null>(null);
 
-  const tabIds = ["offsite", ...(isAdmin ? ["guests"] : []), ...(canSeeHistory ? ["exceptions"] : []), ...(isAdmin ? ["settings"] : [])];
+  const tabIds = [
+    "offsite",
+    ...(isAdmin ? ["guests"] : []),
+    ...(canSeeHistory ? ["exceptions", "s3"] : []),
+    ...(isAdmin ? ["settings"] : []),
+  ];
   const [tab, setTab] = useTabParam(tabIds);
   const summary = query.data?.summary;
   const count = (n: number | undefined) => (n ? ` (${n})` : "");
@@ -469,7 +592,12 @@ export function BackupGapsPage() {
         tabs={[
           { id: "offsite", label: t("backupGaps.tabOffsite") + count(summary?.offsite_gaps) },
           ...(isAdmin ? [{ id: "guests", label: t("backupGaps.tabGuests") + count(summary?.unprotected_guests) }] : []),
-          ...(canSeeHistory ? [{ id: "exceptions", label: t("backupGaps.tabExceptions") }] : []),
+          ...(canSeeHistory
+            ? [
+                { id: "exceptions", label: t("backupGaps.tabExceptions") },
+                { id: "s3", label: t("backupGaps.tabS3") },
+              ]
+            : []),
           ...(isAdmin ? [{ id: "settings", label: t("backupGaps.tabSettings") }] : []),
         ]}
         active={tab}
@@ -478,6 +606,10 @@ export function BackupGapsPage() {
       {tab === "exceptions" && canSeeHistory ? (
         <TabPanel id="exceptions">
           <ExceptionsSection />
+        </TabPanel>
+      ) : tab === "s3" && canSeeHistory ? (
+        <TabPanel id="s3">
+          <S3EndpointsSection isAdmin={isAdmin} />
         </TabPanel>
       ) : (
         <QueryState query={query}>

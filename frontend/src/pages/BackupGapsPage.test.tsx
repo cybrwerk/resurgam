@@ -14,9 +14,10 @@ vi.mock("../api/resources", () => ({
     updateThresholds: vi.fn(),
     checkCluster: vi.fn(),
   },
+  s3EndpointsApi: { list: vi.fn(), setLocation: vi.fn() },
 }));
 
-const { authApi, backupGapsApi } = await import("../api/resources");
+const { authApi, backupGapsApi, s3EndpointsApi } = await import("../api/resources");
 
 function loginAs(roles: string[]) {
   const user = {
@@ -150,5 +151,53 @@ describe("BackupGapsPage", () => {
         expires_at: null,
       }),
     );
+  });
+
+  it("lets a platform admin mark an S3 endpoint on site with a reason", async () => {
+    loginAs(["platform_admin"]);
+    vi.mocked(backupGapsApi.get).mockResolvedValue(gaps());
+    vi.mocked(s3EndpointsApi.list).mockResolvedValue([
+      {
+        id: "e-1",
+        pbs_instance_id: "p-1",
+        pbs_instance_name: "Site A",
+        name: "rustfs",
+        endpoint: "10.0.0.5",
+        port: 9000,
+        region: null,
+        path_style: true,
+        datastores: ["s3-test"],
+        on_site: false,
+        on_site_reason: null,
+        on_site_changed_at: null,
+        on_site_changed_by: null,
+        removed_from_pbs_at: null,
+      },
+    ]);
+    vi.mocked(s3EndpointsApi.setLocation).mockResolvedValue({} as never);
+    renderWithProviders(<BackupGapsPage />, { route: "/?tab=s3" });
+
+    await waitFor(() => expect(screen.getByText("rustfs")).toBeInTheDocument());
+    expect(screen.getByText("10.0.0.5:9000")).toBeInTheDocument();
+    expect(screen.getByText("Offsite")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mark on site" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Reason"), { target: { value: "MinIO in the same rack." } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mark on site" }));
+    await waitFor(() =>
+      expect(s3EndpointsApi.setLocation).toHaveBeenCalledWith("e-1", { on_site: true, reason: "MinIO in the same rack." }),
+    );
+  });
+
+  it("shows a backup stored on S3 as fine, not as a gap", async () => {
+    loginAs(["viewer"]);
+    const data = gaps();
+    data.offsite = [offsite({ workload_label: "s3-vm", status: "stored_offsite", raw_status: "stored_offsite" })];
+    vi.mocked(backupGapsApi.get).mockResolvedValue(data);
+    renderWithProviders(<BackupGapsPage />);
+    await waitFor(() => expect(screen.getByLabelText("Only show gaps")).toBeInTheDocument());
+    expect(screen.queryByText("s3-vm")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Only show gaps"));
+    expect(screen.getByText("Stored in S3")).toBeInTheDocument();
   });
 });

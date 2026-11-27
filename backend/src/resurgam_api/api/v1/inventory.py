@@ -14,7 +14,13 @@ from resurgam_api.db import get_db
 from resurgam_api.errors import ResurgamApiError
 from resurgam_api.inventory.file_index_defaults import default_file_index_exclude_patterns
 from resurgam_api.inventory.protection import evaluate_protection_status
-from resurgam_api.inventory.usage import compute_capacity_forecast, compute_usage_changes, load_daily_peaks
+from resurgam_api.inventory.usage import (
+    NOT_APPLICABLE_FORECAST,
+    compute_capacity_forecast,
+    compute_s3_traffic,
+    compute_usage_changes,
+    load_daily_peaks,
+)
 from resurgam_api.models.audit import AuditEvent
 from resurgam_api.models.datastore import Datastore
 from resurgam_api.models.identity import RoleKey
@@ -35,7 +41,7 @@ from resurgam_api.schemas.inventory import (
     TaskRunOut,
 )
 from resurgam_api.schemas.protection_policy import AssignProtectionPolicyRequest
-from resurgam_api.schemas.usage import CapacityForecastOut, DatastoreUsageOut, UsageMeasurementOut
+from resurgam_api.schemas.usage import CapacityForecastOut, DatastoreUsageOut, S3TrafficOut, UsageMeasurementOut
 
 router = APIRouter(tags=["inventory"])
 
@@ -546,6 +552,14 @@ def to_usage_measurement_out(measurement: UsageMeasurement) -> UsageMeasurementO
         oldest_snapshot_at=measurement.oldest_snapshot_at,
         newest_snapshot_at=measurement.newest_snapshot_at,
         last_successful_gc_at=measurement.last_successful_gc_at,
+        s3_data_bytes=measurement.s3_data_bytes,
+        s3_get_requests=measurement.s3_get_requests,
+        s3_put_requests=measurement.s3_put_requests,
+        s3_post_requests=measurement.s3_post_requests,
+        s3_head_requests=measurement.s3_head_requests,
+        s3_delete_requests=measurement.s3_delete_requests,
+        s3_uploaded_bytes=measurement.s3_uploaded_bytes,
+        s3_downloaded_bytes=measurement.s3_downloaded_bytes,
     )
 
 
@@ -558,7 +572,10 @@ def get_datastore_usage(
     """Manifest §9.3: capacity history for one datastore. Same customer
     scope as `/datastores/{id}` itself — reuses the same 404-not-403 check.
     """
-    get_datastore_in_scope_or_404(db, datastore_id, user)
+    datastore = get_datastore_in_scope_or_404(db, datastore_id, user)
+    # ADR 0033: for S3 the change figures follow the bucket's data
+    # (`s3_data_bytes`), not the local cache filesystem.
+    change_attr = "s3_data_bytes" if datastore.is_s3 else "used_bytes"
 
     now = datetime.now(UTC)
     # Newest 500, not oldest 500: at a 15-minute sync cadence 500 rows are
@@ -577,23 +594,42 @@ def get_datastore_usage(
     # The 24 h / 30 d baselines are looked up on their own -- the 500 rows
     # above rarely reach back 30 days.
     def closest_before(cutoff: datetime) -> UsageMeasurement | None:
-        return (
-            db.query(UsageMeasurement)
-            .filter(UsageMeasurement.datastore_id == datastore_id, UsageMeasurement.captured_at <= cutoff)
-            .order_by(UsageMeasurement.captured_at.desc())
-            .first()
+        query = db.query(UsageMeasurement).filter(
+            UsageMeasurement.datastore_id == datastore_id, UsageMeasurement.captured_at <= cutoff
         )
+        if datastore.is_s3:
+            query = query.filter(UsageMeasurement.s3_data_bytes.isnot(None))
+        return query.order_by(UsageMeasurement.captured_at.desc()).first()
 
     points: list[UsageMeasurement] = []
-    if latest is not None:
+    change_latest = closest_before(now) if datastore.is_s3 else latest
+    if change_latest is not None:
         baselines = {closest_before(now - timedelta(days=30)), closest_before(now - timedelta(hours=24))}
-        points = sorted((b for b in baselines if b is not None and b.id != latest.id), key=lambda m: m.captured_at)
-        points.append(latest)
-    daily_change, monthly_change = compute_usage_changes(points, now)
+        points = sorted(
+            (b for b in baselines if b is not None and b.id != change_latest.id), key=lambda m: m.captured_at
+        )
+        points.append(change_latest)
+    daily_change, monthly_change = compute_usage_changes(points, now, change_attr)
 
-    forecast = compute_capacity_forecast(
-        load_daily_peaks(db, datastore_id, now), latest.available_bytes if latest else None, now
-    )
+    if datastore.is_s3:
+        forecast = NOT_APPLICABLE_FORECAST
+        counter_rows = (
+            db.query(UsageMeasurement)
+            .filter(
+                UsageMeasurement.datastore_id == datastore_id,
+                UsageMeasurement.captured_at >= now - timedelta(days=31),
+                UsageMeasurement.s3_put_requests.isnot(None),
+            )
+            .order_by(UsageMeasurement.captured_at)
+            .all()
+        )
+        traffic_24h = compute_s3_traffic(counter_rows, now - timedelta(hours=24))
+        traffic_30d = compute_s3_traffic(counter_rows, now - timedelta(days=30))
+    else:
+        forecast = compute_capacity_forecast(
+            load_daily_peaks(db, datastore_id, now), latest.available_bytes if latest else None, now
+        )
+        traffic_24h = traffic_30d = None
 
     return DatastoreUsageOut(
         latest=to_usage_measurement_out(latest) if latest else None,
@@ -607,4 +643,7 @@ def get_datastore_usage(
             days_until_full=forecast.days_until_full,
             full_at=forecast.full_at,
         ),
+        backend_type=datastore.backend_type or "filesystem",
+        s3_traffic_24h=S3TrafficOut(**traffic_24h) if traffic_24h else None,
+        s3_traffic_30d=S3TrafficOut(**traffic_30d) if traffic_30d else None,
     )

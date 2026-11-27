@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from resurgam_api.auth.scope import effective_group_customer_id
 from resurgam_api.models.billing import PricingPlan
-from resurgam_api.models.datastore import DatastoreCustomerAssignment, DatastoreRole
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot, BackupType
 from resurgam_api.models.tenancy import Customer
 from resurgam_api.models.usage import UsageMeasurement
@@ -85,6 +85,7 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
 
     usage_by_datastore = _latest_usage_by_datastore(db, {g.datastore_id for g in matching})
     logical_by_group = _group_logical_bytes(db, [g.id for g in matching])
+    s3_datastores = {d.id for d in db.query(Datastore).filter(Datastore.backend_type == "s3").all()}
 
     unit_counts = {BackupType.VM.value: 0, BackupType.CT.value: 0, BackupType.HOST.value: 0}
     estimated_physical_bytes = 0
@@ -98,11 +99,17 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
 
         usage = usage_by_datastore.get(group.datastore_id)
         group_logical_bytes = logical_by_group.get(group.id, 0)
-        if usage is None or not usage.logical_bytes or not group_logical_bytes:
+        # ADR 0033: on an S3 datastore `used_bytes` is the local cache; the
+        # bucket's data (what the provider bills) is `s3_data_bytes`, known
+        # once a garbage collection has run.
+        physical = None
+        if usage is not None:
+            physical = usage.s3_data_bytes if group.datastore_id in s3_datastores else usage.used_bytes
+        if usage is None or not usage.logical_bytes or not group_logical_bytes or physical is None:
             if group_logical_bytes:
                 estimate_complete = False
             continue
-        dedup_ratio = usage.used_bytes / usage.logical_bytes
+        dedup_ratio = physical / usage.logical_bytes
         estimated_physical_bytes += round(group_logical_bytes * dedup_ratio)
 
     plan = db.query(PricingPlan).filter_by(customer_id=customer.id).one_or_none()

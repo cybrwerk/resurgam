@@ -21,6 +21,12 @@ class RemoteDatastore:
     name: str
     path: str | None = None
     comment: str | None = None
+    # PBS 4.x datastore backend (ADR 0033): "filesystem" (also when PBS sends
+    # no `backend` property) or "s3". For S3, the endpoint id from
+    # `/config/s3` and the bucket; `path` is then the local cache.
+    backend_type: str = "filesystem"
+    s3_endpoint: str | None = None
+    s3_bucket: str | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +153,47 @@ class RemoteDatastoreUsage:
     used_bytes: int
     available_bytes: int
     total_bytes: int
+    backend_type: str = "filesystem"
+    # `gc-status.disk-bytes` of the last garbage collection: the chunk data
+    # GC found in the chunk store -- for an S3 datastore the data in the
+    # bucket. None until a GC has run (`gc-status.upid` is null).
+    gc_disk_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class RemoteS3Endpoint:
+    """One entry of PBS 4.x `GET /config/s3` (confirmed live, PBS 4.2). The
+    secret key is never returned by PBS; the access key is not read."""
+
+    id: str
+    endpoint: str
+    port: int | None = None
+    region: str | None = None
+    path_style: bool = False
+    fingerprint: str | None = None
+
+
+@dataclass(frozen=True)
+class S3EndpointListResult:
+    reachable: bool
+    endpoints: list[RemoteS3Endpoint] | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class S3Statistics:
+    """`s3-statistics` of `GET /admin/datastore/{store}/status` for an S3
+    datastore (confirmed live, PBS 4.2). Counters since the datastore's last
+    counter reset -- PBS resets them on the datastore's optional "threshold
+    reset schedule" (notifications docs), so they are not monotonic."""
+
+    get: int
+    put: int
+    post: int
+    head: int
+    delete: int
+    uploaded_bytes: int
+    downloaded_bytes: int
 
 
 @dataclass(frozen=True)

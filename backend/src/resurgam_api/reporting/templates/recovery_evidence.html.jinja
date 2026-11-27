@@ -251,7 +251,7 @@
 {{ controls("offsite_status") }}
 {% if report.offsite_status %}
 <table>
-  {% set status_labels = {"ok": "Current", "lagging": "Behind", "missing": "Missing", "local_copy_only": "Same PBS only", "target_not_connected": "Not checkable", "no_copy_job": "No sync job", "excepted": "Accepted", "not_required": "Not required"} %}
+  {% set status_labels = {"ok": "Current", "stored_offsite": "Stored in S3", "lagging": "Behind", "missing": "Missing", "local_copy_only": "Same PBS only", "target_not_connected": "Not checkable", "no_copy_job": "No sync job", "excepted": "Accepted", "not_required": "Not required"} %}
   <tr><th>Workload</th><th>Status</th><th>Copy at</th><th>Newest copy</th><th>Lag</th><th>Note</th></tr>
   {% for e in report.offsite_status %}
   {% if e.status %}

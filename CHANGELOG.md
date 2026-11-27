@@ -13,6 +13,16 @@ the signed update bundle, where the appliance's Updates page shows it before you
   template with this appliance's address filled in, and lists every value to enter in Zabbix. Manual
   section "Zabbix monitoring". API: `GET /zabbix/setup`, `/zabbix/template`, `/zabbix/ca-certificate`;
   `/zabbix/datastores/usage` now also returns `age_seconds`.
+- **S3-backed datastores** (PBS 4.x, ADR 0033): RESURGAM recognizes datastores in an S3 object store
+  and shows bucket and endpoint. They count as offsite for 3-2-1 -- a copy into one is an offsite copy
+  even on the same PBS, a backup stored on one shows "Stored in S3" -- unless a platform admin marks
+  the endpoint on site, with a reason (3-2-1 Gaps → S3 endpoints, audited). Capacity: PBS reports the
+  local cache filesystem as an S3 datastore's usage; RESURGAM now labels it as the cache, shows the data
+  in the bucket (from the last garbage collection) and the S3 traffic of the last 30 days, and no longer
+  forecasts a "full" date or raises "full soon" alarms for it. The per-GB billing estimate uses the
+  bucket size. Before, the cache disk was shown as the datastore's size. API: `GET /s3-endpoints`,
+  `PUT /s3-endpoints/{id}/location`; new S3 fields on datastores, usage measurements and the Zabbix
+  datastore payloads.
 
 ## 0.3.1
 

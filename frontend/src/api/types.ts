@@ -1113,6 +1113,38 @@ export interface DatastoreOut {
   keys_missing?: string[];
   /** How many current backups in this datastore are client-side encrypted. */
   encrypted_snapshot_count?: number;
+  /** PBS 4.x backend (ADR 0033); null until discovery ran once. For "s3", path is the local cache. */
+  backend_type?: DatastoreBackend | null;
+  s3_endpoint_name?: string | null;
+  s3_bucket?: string | null;
+  s3_endpoint_host?: string | null;
+  /** S3 only: counts as offsite for 3-2-1 unless the endpoint is marked on-site. */
+  s3_offsite?: boolean | null;
+}
+
+export type DatastoreBackend = "filesystem" | "s3";
+
+/** A PBS S3 endpoint with RESURGAM's on-site mark (ADR 0033). */
+export interface S3EndpointOut {
+  id: string;
+  pbs_instance_id: string;
+  pbs_instance_name: string;
+  name: string;
+  endpoint: string;
+  port: number | null;
+  region: string | null;
+  path_style: boolean;
+  datastores: string[];
+  on_site: boolean;
+  on_site_reason: string | null;
+  on_site_changed_at: string | null;
+  on_site_changed_by: string | null;
+  removed_from_pbs_at: string | null;
+}
+
+export interface S3EndpointLocationRequest {
+  on_site: boolean;
+  reason: string;
 }
 
 /** Client-side encryption of a backup as PBS reports it (ADR 0031); null = not known yet. */
@@ -1192,9 +1224,29 @@ export interface UsageMeasurementOut {
   oldest_snapshot_at: string | null;
   newest_snapshot_at: string | null;
   last_successful_gc_at: string | null;
+  /** S3 only (ADR 0033): bucket data as of the last GC; null before the first GC. */
+  s3_data_bytes?: number | null;
+  /** S3 only: PBS counters since the datastore's last counter reset. */
+  s3_get_requests?: number | null;
+  s3_put_requests?: number | null;
+  s3_post_requests?: number | null;
+  s3_head_requests?: number | null;
+  s3_delete_requests?: number | null;
+  s3_uploaded_bytes?: number | null;
+  s3_downloaded_bytes?: number | null;
 }
 
-export type CapacityForecastStatus = "growing" | "not_growing" | "insufficient_history";
+export interface S3TrafficOut {
+  s3_get_requests: number;
+  s3_put_requests: number;
+  s3_post_requests: number;
+  s3_head_requests: number;
+  s3_delete_requests: number;
+  s3_uploaded_bytes: number;
+  s3_downloaded_bytes: number;
+}
+
+export type CapacityForecastStatus = "growing" | "not_growing" | "insufficient_history" | "not_applicable";
 
 export interface CapacityForecastOut {
   status: CapacityForecastStatus;
@@ -1210,6 +1262,10 @@ export interface DatastoreUsageOut {
   daily_change_bytes: number | null;
   monthly_change_bytes: number | null;
   forecast: CapacityForecastOut;
+  /** "s3": used/available/total are the local cache filesystem (ADR 0033). */
+  backend_type?: DatastoreBackend;
+  s3_traffic_24h?: S3TrafficOut | null;
+  s3_traffic_30d?: S3TrafficOut | null;
 }
 
 export interface BackupSnapshotOut {
@@ -1778,7 +1834,7 @@ export interface OffsiteStatusEntryOut {
   backup_group_id: string;
   workload_label: string;
   has_offsite_copy: boolean;
-  offsite_method: "datastore_role" | "sync_job" | "exception" | "none";
+  offsite_method: "datastore_role" | "sync_job" | "s3_datastore" | "exception" | "none";
   sync_schedule: string | null;
   last_synced_at: string | null;
   // RESURGAM 0.3.2+ (ADR 0032); null in older reports.
@@ -1795,6 +1851,7 @@ export interface OffsiteStatusEntryOut {
 
 export type OffsiteStatus =
   | "ok"
+  | "stored_offsite"
   | "lagging"
   | "missing"
   | "local_copy_only"

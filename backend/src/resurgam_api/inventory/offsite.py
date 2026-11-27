@@ -9,6 +9,10 @@ local -> remote. A remote is matched to a connected PBS instance by its
 certificate fingerprint, else by host and port. A synced snapshot keeps its
 `backup-time`, so "not copied yet" means: newer than the newest snapshot in
 the copy.
+
+ADR 0033: an S3-backed datastore is offsite unless an operator marked its
+S3 endpoint on-site. A copy landing there is an offsite copy even on the same
+PBS, and a backup stored straight on it is `stored_offsite`.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from resurgam_api.instance_settings import get_instance_settings
-from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole, PbsS3Endpoint
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot, ProtectionPolicy
 from resurgam_api.models.pbs import PbsInstance
 from resurgam_api.models.sync import SyncJob
@@ -45,6 +49,8 @@ class OffsiteStatus(str, Enum):
     NO_COPY_JOB = "no_copy_job"
     EXCEPTED = "excepted"
     NOT_REQUIRED = "not_required"
+    # ADR 0033: the backup itself lives on an offsite S3 object store.
+    STORED_OFFSITE = "stored_offsite"
 
 
 def lag_thresholds(db: Session) -> tuple[int, int]:
@@ -193,6 +199,28 @@ def build_copy_edges(db: Session) -> list[CopyEdge]:
     return edges
 
 
+# --- S3 object stores ----------------------------------------------------------------
+
+
+def s3_label(datastore: Datastore, endpoint: PbsS3Endpoint | None) -> str:
+    where = endpoint.endpoint if endpoint is not None else datastore.s3_endpoint_name or "?"
+    return f"S3 bucket {datastore.s3_bucket or '?'} @ {where}"
+
+
+def offsite_object_stores(db: Session) -> dict[uuid.UUID, str]:
+    """S3-backed datastores that count as offsite, with a readable location:
+    every one whose endpoint is not marked on-site. An endpoint RESURGAM has
+    not synced yet is offsite too -- the rule is "offsite unless marked"."""
+    endpoints = {(e.pbs_instance_id, e.name): e for e in db.query(PbsS3Endpoint).all()}
+    result: dict[uuid.UUID, str] = {}
+    for datastore in db.query(Datastore).filter(Datastore.backend_type == "s3").all():
+        endpoint = endpoints.get((datastore.pbs_instance_id, datastore.s3_endpoint_name))
+        if endpoint is not None and endpoint.on_site:
+            continue
+        result[datastore.id] = s3_label(datastore, endpoint)
+    return result
+
+
 # --- per-group evaluation ---------------------------------------------------------
 
 
@@ -234,6 +262,7 @@ def evaluate_offsite(
     offsite_role = {
         a.datastore_id for a in db.query(DatastoreCustomerAssignment).filter_by(role=DatastoreRole.OFFSITE.value).all()
     }
+    object_stores = offsite_object_stores(db)
     target_datastores = {e.target_datastore_id for e in edges if e.target_datastore_id}
 
     # Every current group on a copy target, by identity.
@@ -251,10 +280,14 @@ def evaluate_offsite(
             copies[_copy_key(g.datastore_id, g.namespace or "", g.backup_type, g.backup_id)] = g
 
     copy_group_ids: set[uuid.UUID] = set()
-    candidates: list[tuple[BackupGroup, list[tuple[CopyEdge, str]]]] = []
+    candidates: list[tuple[BackupGroup, list[tuple[CopyEdge, str]] | None]] = []
     for group in groups:
         if group.datastore_id in offsite_role or _is_copy(group, edges):
             copy_group_ids.add(group.id)
+            continue
+        if group.datastore_id in object_stores:
+            # Covering edges don't matter: the backup already is offsite.
+            candidates.append((group, None))
             continue
         covering = []
         for edge in edges:
@@ -278,10 +311,16 @@ def evaluate_offsite(
             group=group,
             status=OffsiteStatus.NO_COPY_JOB,
             latest_backup_at=own_times[-1] if own_times else group.last_backup_at,
-            jobs=[edge.job_label for edge, _ in covering],
+            jobs=[edge.job_label for edge, _ in covering or []],
             dr_required=group.protection_policy_id in dr_policies,
         )
         results.append(evaluation)
+        if covering is None:
+            evaluation.status = OffsiteStatus.STORED_OFFSITE
+            evaluation.copy_label = object_stores[group.datastore_id]
+            evaluation.latest_copy_at = evaluation.latest_backup_at
+            evaluation.lag_hours = 0.0
+            continue
         if not covering:
             continue
 
@@ -295,7 +334,7 @@ def evaluate_offsite(
             copy = copies.get(_copy_key(edge.target_datastore_id, target_ns, group.backup_type, group.backup_id))
             if copy is None:
                 continue
-            if not _edge_is_offsite(edge, group, datastores, offsite_role):
+            if not _edge_is_offsite(edge, group, datastores, offsite_role, object_stores):
                 local_only = local_only or (copy, edge)
             elif best is None or _latest(snapshot_times, copy.id) > _latest(snapshot_times, best[0].id):
                 best = (copy, edge)
@@ -303,11 +342,12 @@ def evaluate_offsite(
         offsite_edges = [
             (edge, ns)
             for edge, ns in covering
-            if edge.target_datastore_id is not None and _edge_is_offsite(edge, group, datastores, offsite_role)
+            if edge.target_datastore_id is not None
+            and _edge_is_offsite(edge, group, datastores, offsite_role, object_stores)
         ]
         if best is None and offsite_edges:
             # A job copies the group offsite, but nothing has arrived yet.
-            evaluation.copy_label = offsite_edges[0][0].target_label
+            evaluation.copy_label = _target_label(offsite_edges[0][0], object_stores)
             _apply_lag(evaluation, own_times, None, now, warning_hours, missing_if_late=True)
         elif best is None and unconnected is not None:
             evaluation.status = OffsiteStatus.TARGET_NOT_CONNECTED
@@ -323,7 +363,7 @@ def evaluate_offsite(
         else:
             copy, edge = best
             copy_times = snapshot_times.get(copy.id, [])
-            evaluation.copy_label = edge.target_label
+            evaluation.copy_label = _target_label(edge, object_stores)
             evaluation.copy_backup_group_id = copy.id
             evaluation.latest_copy_at = copy_times[-1] if copy_times else None
             _apply_lag(evaluation, own_times, evaluation.latest_copy_at, now, warning_hours, missing_if_late=False)
@@ -335,10 +375,19 @@ def _latest(snapshot_times: dict[uuid.UUID, list[datetime]], group_id: uuid.UUID
     return times[-1] if times else datetime.min.replace(tzinfo=UTC)
 
 
+def _target_label(edge: CopyEdge, object_stores: dict[uuid.UUID, str]) -> str:
+    store = object_stores.get(edge.target_datastore_id) if edge.target_datastore_id else None
+    return f"{edge.target_label} ({store})" if store else edge.target_label
+
+
 def _edge_is_offsite(
-    edge: CopyEdge, group: BackupGroup, datastores: dict[uuid.UUID, Datastore], offsite_role: set[uuid.UUID]
+    edge: CopyEdge,
+    group: BackupGroup,
+    datastores: dict[uuid.UUID, Datastore],
+    offsite_role: set[uuid.UUID],
+    object_stores: dict[uuid.UUID, str],
 ) -> bool:
-    if edge.target_datastore_id in offsite_role:
+    if edge.target_datastore_id in offsite_role or edge.target_datastore_id in object_stores:
         return True
     target, source = datastores.get(edge.target_datastore_id), datastores.get(group.datastore_id)
     return target is not None and source is not None and target.pbs_instance_id != source.pbs_instance_id
@@ -391,6 +440,7 @@ def offsite_severity(
         return "warning"
     if status == OffsiteStatus.NO_COPY_JOB:
         return "warning" if dr_required else None
+    # ok, stored_offsite, excepted, not_required
     return None
 
 

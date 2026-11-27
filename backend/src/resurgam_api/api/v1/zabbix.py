@@ -23,7 +23,7 @@ from resurgam_api.auth.dependency import require_role
 from resurgam_api.config import Settings, get_settings
 from resurgam_api.db import get_db
 from resurgam_api.errors import ResurgamApiError
-from resurgam_api.inventory.usage import compute_capacity_forecast, load_daily_peaks
+from resurgam_api.inventory.usage import NOT_APPLICABLE_FORECAST, compute_capacity_forecast, load_daily_peaks
 from resurgam_api.lab_setup.pairing import read_ca_certificate
 from resurgam_api.models.datastore import Datastore
 from resurgam_api.models.identity import RoleKey
@@ -164,6 +164,7 @@ def zabbix_discover_datastores(
                 datastore_name=datastore.name,
                 pbs_instance_id=str(instance.id),
                 pbs_instance_name=instance.display_name,
+                backend_type=datastore.backend_type or "filesystem",
             )
             for datastore, instance in rows
         ]
@@ -191,7 +192,11 @@ def zabbix_datastore_usage(
         if latest is None:
             continue
         usage_percent = (latest.used_bytes / latest.total_bytes * 100) if latest.total_bytes else 0.0
-        forecast = compute_capacity_forecast(load_daily_peaks(db, datastore.id, now), latest.available_bytes, now)
+        forecast = (
+            NOT_APPLICABLE_FORECAST
+            if datastore.is_s3
+            else compute_capacity_forecast(load_daily_peaks(db, datastore.id, now), latest.available_bytes, now)
+        )
         values.append(
             ZabbixDatastoreUsageValue(
                 datastore_id=str(datastore.id),
@@ -203,6 +208,8 @@ def zabbix_datastore_usage(
                 age_seconds=max(0.0, (now - _aware(latest.captured_at)).total_seconds()),
                 growth_bytes_per_day=forecast.growth_bytes_per_day,
                 days_until_full=forecast.days_until_full if forecast.days_until_full is not None else -1.0,
+                backend_type=datastore.backend_type or "filesystem",
+                s3_data_bytes=latest.s3_data_bytes,
             )
         )
     return ZabbixDatastoreUsageOut(datastores=values)

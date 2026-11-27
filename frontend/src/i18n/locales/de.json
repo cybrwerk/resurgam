@@ -409,7 +409,9 @@
     "jobsModalTitle": "Backup- & Wartungs-Jobs — {{name}}",
     "removedFromPbs": "Auf PBS entfernt",
     "removedFromPbsHint": "Der PBS führt diesen Datastore nicht mehr (festgestellt am {{date}}). Kundenzuordnung und Verlauf bleiben erhalten; taucht er auf dem PBS wieder auf, wird er automatisch wiederhergestellt.",
-    "importAutoDiscoveryHint": "Datastores werden bei jeder Collector-Synchronisation automatisch erkannt und importiert; hier nur importieren, wenn einer sofort erscheinen soll."
+    "importAutoDiscoveryHint": "Datastores werden bei jeder Collector-Synchronisation automatisch erkannt und importiert; hier nur importieren, wenn einer sofort erscheinen soll.",
+    "s3HintOffsite": "S3-Bucket {{bucket}} @ {{endpoint}}. Zählt für 3-2-1 als offsite. Die Belegung ist die des lokalen Caches.",
+    "s3HintOnSite": "S3-Bucket {{bucket}} @ {{endpoint}}. Der Endpoint ist als vor Ort markiert und zählt nicht als offsite. Die Belegung ist die des lokalen Caches."
   },
   "pbsJobs": {
     "pruneTitle": "Prune-Jobs (Aufbewahrung)",
@@ -1126,7 +1128,14 @@
     "fullNow": "Voll",
     "notGrowing": "Wächst nicht",
     "insufficientHistory": "Zu wenig Verlauf ({{count}}/7 Tage)",
-    "forecastHint": "Nettowachstum der letzten {{days}} Tage (nach Prune und Garbage Collection), voll etwa am {{date}}"
+    "forecastHint": "Nettowachstum der letzten {{days}} Tage (nach Prune und Garbage Collection), voll etwa am {{date}}",
+    "s3NoForecast": "Keine feste Grösse (S3)",
+    "s3InBucket": "{{size}} im Bucket",
+    "s3SizeAfterGc": "Bucket-Grösse nach der ersten Garbage Collection bekannt",
+    "s3Cache": "Cache {{percent}}% ({{used}} / {{total}})",
+    "s3CacheHint": "Bei einem S3-Datastore meldet PBS als belegt/gesamt das lokale Cache-Dateisystem, nicht den Bucket. Ein voller Cache-Datenträger legt PBS trotzdem lahm, darum wird er wie jeder Datenträger überwacht.",
+    "s3Traffic": "30 T: ↑ {{up}} · ↓ {{down}} · {{requests}} Anfragen",
+    "s3TrafficHint": "S3-Verkehr aus den Zählern von PBS, über die Messungen von RESURGAM summiert. Anbieter verrechnen unter Umständen Anfragen und Egress (Download)."
   },
   "pricingPlans": {
     "title": "Preispläne",
@@ -2519,7 +2528,8 @@
       "target_not_connected": "Nicht prüfbar",
       "no_copy_job": "Kein Sync-Job",
       "excepted": "Akzeptiert",
-      "not_required": "Nicht erforderlich"
+      "not_required": "Nicht erforderlich",
+      "stored_offsite": "In S3 gespeichert"
     },
     "statusHint": {
       "ok": "Eine Offsite-Kopie enthält jedes Backup, oder die neuesten liegen noch innerhalb des Warn-Schwellwerts.",
@@ -2529,7 +2539,8 @@
       "target_not_connected": "Ein Sync-Job kopiert ihn auf einen PBS, der nicht mit RESURGAM verbunden ist; die Kopie ist nicht prüfbar.",
       "no_copy_job": "Kein Sync-Job deckt diesen Workload ab. Alarm nur, wenn seine Schutzrichtlinie Sync/DR verlangt.",
       "excepted": "Von einem Plattform-Admin mit Begründung akzeptiert.",
-      "not_required": "Das Offsite-Kriterium ist für diesen Kunden als nicht anwendbar markiert."
+      "not_required": "Das Offsite-Kriterium ist für diesen Kunden als nicht anwendbar markiert.",
+      "stored_offsite": "Das Backup selbst liegt auf einem S3-Objektspeicher, der als offsite zählt (sein Endpoint ist nicht als vor Ort markiert)."
     },
     "cluster": "PVE-Cluster",
     "guestName": "Name",
@@ -2570,6 +2581,23 @@
     "thresholdsTitle": "Schwellwerte für den Offsite-Rückstand",
     "thresholdsIntro": "Wie alt das älteste noch nicht offsite kopierte Backup werden darf, bevor die Kopie als im Rückstand gilt. Tägliche Backups mit täglichem Sync liegen meist 1 bis 26 Stunden zurück.",
     "warningHours": "Warnung nach (Stunden)",
-    "criticalHours": "Kritisch nach (Stunden)"
+    "criticalHours": "Kritisch nach (Stunden)",
+    "tabS3": "S3-Endpoints",
+    "s3Title": "S3-Endpoints",
+    "s3Intro": "Datastores auf einem S3-Objektspeicher zählen als offsite: Eine Kopie dorthin ist eine Offsite-Kopie, und ein dort gespeichertes Backup braucht keine weitere Kopie. Markieren Sie einen Endpoint als vor Ort, wenn der Objektspeicher am selben Standort wie der PBS steht. Jede Änderung braucht eine Begründung und wird im Audit-Log festgehalten.",
+    "s3Empty": "Kein PBS verwendet einen S3-Endpoint.",
+    "s3Pbs": "PBS",
+    "s3Endpoint": "Endpoint",
+    "s3Datastores": "Datastores",
+    "s3Location": "Zählt als",
+    "s3Offsite": "Offsite",
+    "s3OnSite": "Vor Ort",
+    "s3Removed": "Auf PBS entfernt",
+    "s3MarkOnSite": "Als vor Ort markieren",
+    "s3MarkOffsite": "Als offsite markieren",
+    "s3MarkOnSiteTitle": "S3-Endpoint als vor Ort markieren",
+    "s3MarkOffsiteTitle": "S3-Endpoint als offsite markieren",
+    "s3MarkOnSiteIntro": "Datastores auf {{endpoint}} ({{host}}) zählen nicht mehr als offsite. Kopien dorthin gelten als \"Nur gleicher PBS\", und dort gespeicherte Backups brauchen eine Offsite-Kopie.",
+    "s3MarkOffsiteIntro": "Datastores auf {{endpoint}} ({{host}}) zählen wieder als offsite."
   }
 }

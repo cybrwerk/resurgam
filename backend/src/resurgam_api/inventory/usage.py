@@ -26,7 +26,9 @@ def _closest_before(history: list[UsageMeasurement], cutoff: datetime) -> UsageM
     return candidate
 
 
-def compute_usage_changes(history: list[UsageMeasurement], now: datetime) -> tuple[int | None, int | None]:
+def compute_usage_changes(
+    history: list[UsageMeasurement], now: datetime, attr: str = "used_bytes"
+) -> tuple[int | None, int | None]:
     """Manifest §9.3's "tägliche und monatliche Veränderung" in used bytes.
 
     Computed from RESURGAM's own stored measurements rather than PBS's own
@@ -40,7 +42,11 @@ def compute_usage_changes(history: list[UsageMeasurement], now: datetime) -> tup
 
     `history` must be sorted ascending by `captured_at` and non-empty for
     a change to be computable; the latest entry is always `history[-1]`.
+
+    `attr` picks the figure: `used_bytes`, or `s3_data_bytes` for an S3
+    datastore (ADR 0033) -- rows where it is null (no GC yet) are skipped.
     """
+    history = [m for m in history if getattr(m, attr) is not None]
     if not history:
         return None, None
 
@@ -48,9 +54,49 @@ def compute_usage_changes(history: list[UsageMeasurement], now: datetime) -> tup
     daily_baseline = _closest_before(history[:-1], now - _DAY)
     monthly_baseline = _closest_before(history[:-1], now - _MONTH)
 
-    daily_change = latest.used_bytes - daily_baseline.used_bytes if daily_baseline is not None else None
-    monthly_change = latest.used_bytes - monthly_baseline.used_bytes if monthly_baseline is not None else None
+    value = getattr(latest, attr)
+    daily_change = value - getattr(daily_baseline, attr) if daily_baseline is not None else None
+    monthly_change = value - getattr(monthly_baseline, attr) if monthly_baseline is not None else None
     return daily_change, monthly_change
+
+
+# --- S3 traffic (ADR 0033) ----------------------------------------------------
+
+S3_COUNTERS = (
+    "s3_get_requests",
+    "s3_put_requests",
+    "s3_post_requests",
+    "s3_head_requests",
+    "s3_delete_requests",
+    "s3_uploaded_bytes",
+    "s3_downloaded_bytes",
+)
+
+
+def compute_s3_traffic(history: list[UsageMeasurement], since: datetime) -> dict[str, int] | None:
+    """S3 requests and bytes per counter between `since` and the latest
+    measurement, summed from consecutive measurements. PBS's counters run
+    since the datastore's last counter reset (its optional threshold reset
+    schedule), so a counter lower than in the row before means a reset: that
+    step then counts the new value, as everything since the reset is new.
+    Traffic between the last row before a reset and the reset itself is lost
+    -- the figure is a lower bound. None without two measurements carrying
+    counters in the window. `history` must be sorted ascending."""
+    rows = [m for m in history if m.s3_put_requests is not None]
+    start = None
+    for index, row in enumerate(rows):
+        if row.captured_at >= since:
+            # The row just before the window is the baseline, if there is one.
+            start = max(index - 1, 0)
+            break
+    if start is None or len(rows) - start < 2:
+        return None
+    totals = dict.fromkeys(S3_COUNTERS, 0)
+    for previous, current in zip(rows[start:], rows[start + 1 :], strict=False):
+        for counter in S3_COUNTERS:
+            before, after = getattr(previous, counter) or 0, getattr(current, counter) or 0
+            totals[counter] += after - before if after >= before else after
+    return totals
 
 
 # --- Capacity forecast ------------------------------------------------------
@@ -67,6 +113,9 @@ class ForecastStatus(str, Enum):
     INSUFFICIENT_HISTORY = "insufficient_history"
     GROWING = "growing"
     NOT_GROWING = "not_growing"
+    # ADR 0033: an S3 datastore. Its used/avail is the local cache
+    # filesystem, and a bucket has no fixed size to run out of.
+    NOT_APPLICABLE = "not_applicable"
 
 
 @dataclass(frozen=True)
@@ -76,6 +125,9 @@ class CapacityForecast:
     growth_bytes_per_day: int | None
     days_until_full: float | None
     full_at: datetime | None
+
+
+NOT_APPLICABLE_FORECAST = CapacityForecast(ForecastStatus.NOT_APPLICABLE, 0, None, None, None)
 
 
 def load_daily_peaks(db: Session, datastore_id: uuid.UUID, now: datetime) -> list[tuple[date, int]]:
