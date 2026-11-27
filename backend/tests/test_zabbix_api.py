@@ -80,6 +80,7 @@ def test_discover_datastores_returns_zabbix_lld_shaped_macros(client, platform_a
                 "{#DATASTORE_NAME}": "store1",
                 "{#PBS_INSTANCE_ID}": instance_id,
                 "{#PBS_INSTANCE_NAME}": "PBS",
+                "{#DATASTORE_BACKEND}": "filesystem",
             }
         ]
     }

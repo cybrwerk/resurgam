@@ -28,6 +28,7 @@ function CreatePricingPlanForm({ onDone }: { onDone: () => void }) {
   const [pricePerCt, setPricePerCt] = useState("0");
   const [pricePerHost, setPricePerHost] = useState("0");
   const [pricePerGb, setPricePerGb] = useState("");
+  const [pricePerS3Gb, setPricePerS3Gb] = useState("");
   const [currency, setCurrency] = useState("CHF");
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +41,8 @@ function CreatePricingPlanForm({ onDone }: { onDone: () => void }) {
         price_per_ct_month: pricePerCt,
         price_per_host_month: pricePerHost,
         price_per_gb_month: pricePerGb,
+        // Empty = S3 data not charged (ADR 0033).
+        price_per_s3_gb_month: pricePerS3Gb.trim() === "" ? null : pricePerS3Gb,
         currency,
       }),
     onSuccess: () => {
@@ -160,6 +163,25 @@ function CreatePricingPlanForm({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div className="field">
+            <label className="label" htmlFor="plan-price-s3">
+              {t("pricingPlans.pricePerS3Gb")}
+            </label>
+            <input
+              id="plan-price-s3"
+              type="number"
+              step="0.0001"
+              min={0}
+              className="input"
+              value={pricePerS3Gb}
+              placeholder={t("pricingPlans.pricePerS3GbPlaceholder")}
+              onChange={(e) => setPricePerS3Gb(e.target.value)}
+              aria-describedby="plan-price-s3-hint"
+            />
+            <span id="plan-price-s3-hint" className={styles.hint}>
+              {t("pricingPlans.pricePerS3GbHint")}
+            </span>
+          </div>
+          <div className="field">
             <label className="label" htmlFor="plan-currency">
               {t("pricingPlans.currency")}
             </label>
@@ -195,6 +217,7 @@ function EditPricingPlanModal({ plan, onClose }: { plan: PricingPlanOut; onClose
   const [pricePerCt, setPricePerCt] = useState(plan.price_per_ct_month);
   const [pricePerHost, setPricePerHost] = useState(plan.price_per_host_month);
   const [pricePerGb, setPricePerGb] = useState(plan.price_per_gb_month);
+  const [pricePerS3Gb, setPricePerS3Gb] = useState(plan.price_per_s3_gb_month ?? "");
   const [currency, setCurrency] = useState(plan.currency);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,6 +229,8 @@ function EditPricingPlanModal({ plan, onClose }: { plan: PricingPlanOut; onClose
         price_per_ct_month: pricePerCt,
         price_per_host_month: pricePerHost,
         price_per_gb_month: pricePerGb,
+        // Empty = S3 data not charged (ADR 0033).
+        price_per_s3_gb_month: pricePerS3Gb.trim() === "" ? null : pricePerS3Gb,
         currency,
       }),
     onSuccess: () => {
@@ -303,6 +328,25 @@ function EditPricingPlanModal({ plan, onClose }: { plan: PricingPlanOut; onClose
           />
         </div>
         <div className="field">
+          <label className="label" htmlFor="edit-plan-price-s3">
+            {t("pricingPlans.pricePerS3Gb")}
+          </label>
+          <input
+            id="edit-plan-price-s3"
+            type="number"
+            step="0.0001"
+            min={0}
+            className="input"
+            value={pricePerS3Gb}
+            placeholder={t("pricingPlans.pricePerS3GbPlaceholder")}
+            onChange={(e) => setPricePerS3Gb(e.target.value)}
+            aria-describedby="edit-plan-price-s3-hint"
+          />
+          <span id="edit-plan-price-s3-hint" className={styles.hint}>
+            {t("pricingPlans.pricePerS3GbHint")}
+          </span>
+        </div>
+        <div className="field">
           <label className="label" htmlFor="edit-plan-currency">
             {t("pricingPlans.currency")}
           </label>
@@ -370,6 +414,14 @@ export function PricingPlansPage() {
       key: "priceGb",
       header: t("pricingPlans.pricePerGb"),
       render: (row) => `${row.price_per_gb_month} ${row.currency}`,
+    },
+    {
+      key: "priceS3Gb",
+      header: t("pricingPlans.pricePerS3Gb"),
+      render: (row) =>
+        row.price_per_s3_gb_month === null
+          ? t("pricingPlans.s3NotCharged")
+          : `${row.price_per_s3_gb_month} ${row.currency}`,
     },
     {
       key: "actions",

@@ -41,6 +41,16 @@ export function BillingPage() {
               <StatusBadge tone="warning" label={t("billing.estimateIncomplete")} />
             </>
           )}
+          {row.estimated_s3_bytes > 0 && (
+            <span className="mutedText" style={{ display: "block" }}>
+              {t(
+                row.pricing_plan_id !== null && row.price_per_s3_gb_month === null
+                  ? "billing.s3PartNotCharged"
+                  : "billing.s3Part",
+                { size: formatBytes(row.estimated_s3_bytes) },
+              )}
+            </span>
+          )}
         </span>
       ),
     },

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -58,6 +58,46 @@ class Datastore(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     # `BackupGroup.removed_from_pbs_at` (migration 0051): nothing is ever
     # deleted -- history, customer assignment and usage stay intact, the
     # row just stops counting as live.
+    removed_from_pbs_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # PBS 4.x datastore backend (ADR 0033), refreshed by datastore discovery
+    # from the `backend` property of `GET /config/datastore`: "filesystem" or
+    # "s3"; null until the first discovery after migration 0074. For S3 the
+    # endpoint id (`PbsS3Endpoint.name`) and bucket -- `path` is then the
+    # local cache, and PBS's used/avail/total describe that cache filesystem.
+    backend_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    s3_endpoint_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    s3_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    @property
+    def is_s3(self) -> bool:
+        return self.backend_type == "s3"
+
+
+class PbsS3Endpoint(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
+    """An S3 endpoint configured on a PBS instance (`GET /config/s3`, ADR
+    0033), synced by the Collector. A datastore on it counts as offsite for
+    3-2-1 unless an operator marked the endpoint `on_site` (an object store in
+    the same building) -- with a reason, audited. The mark is RESURGAM's own
+    and survives every sync; a removed endpoint gets `removed_from_pbs_at`.
+    """
+
+    __tablename__ = "pbs_s3_endpoints"
+    __table_args__ = (UniqueConstraint("pbs_instance_id", "name", name="uq_pbs_s3_endpoint_name"),)
+
+    pbs_instance_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pbs_instances.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(500), nullable=False)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    path_style: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    on_site: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    on_site_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    on_site_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    on_site_changed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     removed_from_pbs_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from resurgam_api.auth.scope import effective_group_customer_id
 from resurgam_api.models.billing import PricingPlan
-from resurgam_api.models.datastore import DatastoreCustomerAssignment, DatastoreRole
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot, BackupType
 from resurgam_api.models.tenancy import Customer
 from resurgam_api.models.usage import UsageMeasurement
@@ -71,6 +71,11 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
     measurement yet contributes 0 bytes for its groups and flips
     `physical_bytes_estimate_complete` to False rather than blocking the
     whole computation.
+
+    S3 (ADR 0033): bytes on S3-backed datastores are also reported as
+    `estimated_s3_bytes` and charged at the plan's own, optional
+    `price_per_s3_gb_month` -- null means not charged per GB (the S3
+    provider may be paid some other way), never the filesystem rate.
     """
     datastore_assignments = {a.datastore_id: a for a in db.query(DatastoreCustomerAssignment).all()}
     # A superseded generation (a reused VMID's frozen prior identity,
@@ -85,9 +90,11 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
 
     usage_by_datastore = _latest_usage_by_datastore(db, {g.datastore_id for g in matching})
     logical_by_group = _group_logical_bytes(db, [g.id for g in matching])
+    s3_datastores = {d.id for d in db.query(Datastore).filter(Datastore.backend_type == "s3").all()}
 
     unit_counts = {BackupType.VM.value: 0, BackupType.CT.value: 0, BackupType.HOST.value: 0}
     estimated_physical_bytes = 0
+    estimated_s3_bytes = 0
     estimate_complete = True
 
     for group in matching:
@@ -98,12 +105,21 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
 
         usage = usage_by_datastore.get(group.datastore_id)
         group_logical_bytes = logical_by_group.get(group.id, 0)
-        if usage is None or not usage.logical_bytes or not group_logical_bytes:
+        # ADR 0033: on an S3 datastore `used_bytes` is the local cache; the
+        # bucket's data (what the provider bills) is `s3_data_bytes`, known
+        # once a garbage collection has run.
+        physical = None
+        if usage is not None:
+            physical = usage.s3_data_bytes if group.datastore_id in s3_datastores else usage.used_bytes
+        if usage is None or not usage.logical_bytes or not group_logical_bytes or physical is None:
             if group_logical_bytes:
                 estimate_complete = False
             continue
-        dedup_ratio = usage.used_bytes / usage.logical_bytes
-        estimated_physical_bytes += round(group_logical_bytes * dedup_ratio)
+        dedup_ratio = physical / usage.logical_bytes
+        group_bytes = round(group_logical_bytes * dedup_ratio)
+        estimated_physical_bytes += group_bytes
+        if group.datastore_id in s3_datastores:
+            estimated_s3_bytes += group_bytes
 
     plan = db.query(PricingPlan).filter_by(customer_id=customer.id).one_or_none()
     plan_source: str | None = "customer" if plan is not None else None
@@ -117,8 +133,13 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
             plan.price_per_vm_month * unit_counts[BackupType.VM.value]
             + plan.price_per_ct_month * unit_counts[BackupType.CT.value]
             + plan.price_per_host_month * unit_counts[BackupType.HOST.value]
-            + plan.price_per_gb_month * (Decimal(estimated_physical_bytes) / Decimal(_BYTES_PER_GB))
+            + plan.price_per_gb_month
+            * (Decimal(estimated_physical_bytes - estimated_s3_bytes) / Decimal(_BYTES_PER_GB))
         )
+        # ADR 0033: S3 data has its own, optional price. Null = not charged
+        # (the S3 provider may be paid some other way), never the filesystem rate.
+        if plan.price_per_s3_gb_month is not None:
+            raw_cost += plan.price_per_s3_gb_month * (Decimal(estimated_s3_bytes) / Decimal(_BYTES_PER_GB))
         # An estimate, not an invoice line — two decimal places is plenty;
         # the underlying Decimal division above otherwise carries far more
         # digits than any currency actually uses.
@@ -132,6 +153,7 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
         ct_count=unit_counts[BackupType.CT.value],
         host_count=unit_counts[BackupType.HOST.value],
         estimated_physical_bytes=estimated_physical_bytes,
+        estimated_s3_bytes=estimated_s3_bytes,
         physical_bytes_estimate_complete=estimate_complete,
         pricing_plan_id=plan.id if plan is not None else None,
         pricing_plan_source=plan_source,
@@ -139,6 +161,7 @@ def compute_customer_billing(db: Session, customer: Customer) -> CustomerBilling
         price_per_ct_month=plan.price_per_ct_month if plan is not None else None,
         price_per_host_month=plan.price_per_host_month if plan is not None else None,
         price_per_gb_month=plan.price_per_gb_month if plan is not None else None,
+        price_per_s3_gb_month=plan.price_per_s3_gb_month if plan is not None else None,
         currency=plan.currency if plan is not None else None,
         estimated_monthly_cost=estimated_monthly_cost,
     )

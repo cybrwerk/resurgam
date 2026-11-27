@@ -11,7 +11,7 @@ from resurgam_api.config import Settings, get_settings
 from resurgam_api.db import get_db
 from resurgam_api.errors import ResurgamApiError
 from resurgam_api.models.audit import AuditEvent
-from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, PbsS3Endpoint
 from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.identity import RoleKey
 from resurgam_api.models.inventory import BackupGroup, BackupSnapshot
@@ -56,7 +56,26 @@ def to_out(db: Session, datastore: Datastore) -> DatastoreOut:
         encryption_key_configured=datastore.encryption_key_secret_ref_id is not None,
         removed_from_pbs_at=datastore.removed_from_pbs_at,
         **datastore_encryption(db, datastore.id),
+        **datastore_backend(db, datastore),
     )
+
+
+def datastore_backend(db: Session, datastore: Datastore) -> dict:
+    """Backend fields of `DatastoreOut` (ADR 0033)."""
+    if not datastore.is_s3:
+        return {"backend_type": datastore.backend_type}
+    endpoint = (
+        db.query(PbsS3Endpoint)
+        .filter_by(pbs_instance_id=datastore.pbs_instance_id, name=datastore.s3_endpoint_name)
+        .one_or_none()
+    )
+    return {
+        "backend_type": "s3",
+        "s3_endpoint_name": datastore.s3_endpoint_name,
+        "s3_bucket": datastore.s3_bucket,
+        "s3_endpoint_host": endpoint.endpoint if endpoint else None,
+        "s3_offsite": not (endpoint is not None and endpoint.on_site),
+    }
 
 
 def datastore_encryption(db: Session, datastore_id: uuid.UUID) -> dict:

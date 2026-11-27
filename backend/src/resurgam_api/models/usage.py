@@ -51,3 +51,17 @@ class UsageMeasurement(Base, UUIDPrimaryKeyMixin):
     oldest_snapshot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     newest_snapshot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_successful_gc_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # S3-backed datastores only (ADR 0033). `used/available/total_bytes` are
+    # then the local cache filesystem; `s3_data_bytes` is the chunk data the
+    # last garbage collection found (`gc-status.disk-bytes`) -- the bucket's
+    # size, null until a GC ran. The `s3_*` counters are PBS's `s3-statistics`
+    # as read at `captured_at`: since the datastore's last counter reset, so
+    # deltas between rows must allow for a reset (see `inventory.usage`).
+    s3_data_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_get_requests: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_put_requests: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_post_requests: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_head_requests: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_delete_requests: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_uploaded_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    s3_downloaded_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

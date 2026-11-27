@@ -633,6 +633,16 @@ export function DatastoresPage() {
           <DatabaseIcon className={styles.treeIcon} />
           <span className={styles.treeLabel}>{datastore.name}</span>
           <span className={styles.treeMeta}>
+            {datastore.backend_type === "s3" && (
+              <span
+                title={t(datastore.s3_offsite ? "datastores.s3HintOffsite" : "datastores.s3HintOnSite", {
+                  bucket: datastore.s3_bucket ?? "?",
+                  endpoint: datastore.s3_endpoint_host ?? datastore.s3_endpoint_name ?? "?",
+                })}
+              >
+                <StatusBadge tone="info" label="S3" />
+              </span>
+            )}
             {removedFromPbs && (
               <span
                 title={t("datastores.removedFromPbsHint", {

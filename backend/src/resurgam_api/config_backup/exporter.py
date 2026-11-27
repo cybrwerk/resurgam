@@ -373,6 +373,7 @@ def _pricing_plans(db: Session, lookup: _Lookup) -> list[PricingPlanEntry]:
             price_per_ct_month=plan.price_per_ct_month,
             price_per_host_month=plan.price_per_host_month,
             price_per_gb_month=plan.price_per_gb_month,
+            price_per_s3_gb_month=plan.price_per_s3_gb_month,
             currency=plan.currency,
         )
         for plan in db.query(PricingPlan).all()

@@ -7,12 +7,21 @@ from pydantic import BaseModel, Field, model_validator
 GapExceptionKindLiteral = Literal["pve_guest", "pve_cluster", "backup_group", "datastore"]
 GuestGapReasonLiteral = Literal["no_job", "only_disabled_jobs"]
 OffsiteStatusLiteral = Literal[
-    "ok", "lagging", "missing", "local_copy_only", "target_not_connected", "no_copy_job", "excepted", "not_required"
+    "ok",
+    "stored_offsite",
+    "lagging",
+    "missing",
+    "local_copy_only",
+    "target_not_connected",
+    "no_copy_job",
+    "excepted",
+    "not_required",
 ]
 
 _OFFSITE_STATUS_HELP = (
     "`ok` (an offsite copy holds every snapshot, or the oldest one not copied yet is younger than the warning "
-    "threshold), `lagging` (the oldest snapshot not copied yet is older than the warning threshold), `missing` (a sync "
+    "threshold), `stored_offsite` (the backup itself is on an S3-backed datastore whose endpoint is not marked on-site, "
+    "ADR 0033), `lagging` (the oldest snapshot not copied yet is older than the warning threshold), `missing` (a sync "
     "job copies this group offsite but no copy exists and its oldest backup is older than the warning threshold), "
     "`local_copy_only` (the only copy is on the same PBS), `target_not_connected` (a sync job copies it to a PBS that "
     "is not connected to RESURGAM, so the copy cannot be checked), `no_copy_job` (no sync job covers this group), "

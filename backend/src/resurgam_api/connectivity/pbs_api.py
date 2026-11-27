@@ -17,9 +17,12 @@ from resurgam_api.connectivity.models import (
     RemoteDatastoreUsage,
     RemoteListResult,
     RemoteRemote,
+    RemoteS3Endpoint,
     RemoteSnapshot,
     RemoteSyncJob,
     RemoteTask,
+    S3EndpointListResult,
+    S3Statistics,
     SnapshotListResult,
     SyncJobListResult,
     TaskListResult,
@@ -33,6 +36,7 @@ DATASTORE_CONFIG_PATH = "/api2/json/config/datastore"
 TASKS_PATH = "/api2/json/nodes/localhost/tasks"
 TIME_PATH = "/api2/json/nodes/localhost/time"
 DATASTORE_USAGE_PATH = "/api2/json/status/datastore-usage"
+S3_CONFIG_PATH = "/api2/json/config/s3"
 REMOTE_CONFIG_PATH = "/api2/json/config/remote"
 SYNC_CONFIG_PATH = "/api2/json/config/sync"
 PRUNE_CONFIG_PATH = "/api2/json/config/prune"
@@ -179,12 +183,91 @@ def list_datastores(host: str, port: int, trust: TrustConfig, token: str, timeou
 
     try:
         datastores = [
-            RemoteDatastore(name=entry["name"], path=entry.get("path"), comment=entry.get("comment")) for entry in data
+            RemoteDatastore(
+                name=entry["name"], path=entry.get("path"), comment=entry.get("comment"), **parse_backend(entry)
+            )
+            for entry in data
         ]
     except (TypeError, KeyError) as exc:
         return DatastoreListResult(reachable=False, error=f"unexpected response shape: {exc}")
 
     return DatastoreListResult(reachable=True, datastores=datastores)
+
+
+def parse_backend(entry: dict) -> dict:
+    """The `backend` property of a PBS 4.x datastore config entry, e.g.
+    `type=s3,client=<endpoint id>,bucket=<bucket>` (confirmed live, PBS 4.2),
+    as `RemoteDatastore` keyword arguments. No `backend` = a filesystem
+    datastore, as on every PBS before 4.0. Endpoint ids and bucket names
+    contain no commas, so a plain split is enough."""
+    raw = entry.get("backend")
+    if not isinstance(raw, str) or not raw:
+        return {"backend_type": "filesystem"}
+    props: dict[str, str] = {}
+    for part in raw.split(","):
+        key, sep, value = part.partition("=")
+        if sep:
+            props[key.strip()] = _unquote_property_value(value.strip())
+        elif "type" not in props:
+            # The default key of the property string is `type`.
+            props["type"] = key.strip()
+    backend_type = props.get("type") or "filesystem"
+    if backend_type != "s3":
+        return {"backend_type": backend_type}
+    return {"backend_type": "s3", "s3_endpoint": props.get("client"), "s3_bucket": props.get("bucket")}
+
+
+def list_s3_endpoints(
+    host: str, port: int, trust: TrustConfig, token: str, timeout: float = 5.0
+) -> S3EndpointListResult:
+    """PBS 4.x S3 endpoint configs, `GET /api2/json/config/s3` (confirmed
+    live, PBS 4.2; readable with Sys.Audit). An older PBS without S3 support
+    answers 404 / an error -- reported as unreachable, the caller treats that
+    as "no endpoints known" and changes nothing."""
+    data, error = _get_data(host, port, trust, token, S3_CONFIG_PATH, timeout)
+    if error is not None:
+        return S3EndpointListResult(reachable=False, error=error)
+    try:
+        endpoints = [
+            RemoteS3Endpoint(
+                id=entry["id"],
+                endpoint=entry["endpoint"],
+                port=entry.get("port"),
+                region=entry.get("region"),
+                path_style=bool(entry.get("path-style", False)),
+                fingerprint=entry.get("fingerprint"),
+            )
+            for entry in data
+        ]
+    except (TypeError, KeyError) as exc:
+        return S3EndpointListResult(reachable=False, error=f"unexpected response shape: {exc}")
+    return S3EndpointListResult(reachable=True, endpoints=endpoints)
+
+
+def get_s3_statistics(
+    host: str, port: int, trust: TrustConfig, token: str, timeout: float, *, store: str
+) -> S3Statistics | None:
+    """`s3-statistics` from `GET /admin/datastore/{store}/status` (confirmed
+    live, PBS 4.2: get/put/post/head/delete counts plus uploaded/downloaded
+    bytes). None when PBS can't be asked or the datastore isn't S3-backed."""
+    data, error = _get_data(host, port, trust, token, f"/api2/json/admin/datastore/{store}/status", timeout)
+    if error is not None or not isinstance(data, dict):
+        return None
+    stats = data.get("s3-statistics")
+    if not isinstance(stats, dict):
+        return None
+    try:
+        return S3Statistics(
+            get=int(stats.get("get", 0)),
+            put=int(stats.get("put", 0)),
+            post=int(stats.get("post", 0)),
+            head=int(stats.get("head", 0)),
+            delete=int(stats.get("delete", 0)),
+            uploaded_bytes=int(stats.get("uploaded", 0)),
+            downloaded_bytes=int(stats.get("downloaded", 0)),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def _datastore_config_item_path(name: str) -> str:
@@ -551,9 +634,11 @@ def list_datastore_usage(
     Hits `/api2/json/status/datastore-usage` — confirmed against a real PBS
     4.2 instance to return `{"data": [{"store", "used", "avail", "total",
     "backend-type", "gc-status": {...}, "history": [...], "history-start",
-    "history-delta", ...}, ...]}`. Only `store`/`used`/`avail`/`total` are
-    read here; `history` (PBS's own periodic fill-ratio samples) and
-    `gc-status` are real but unused in this slice — RESURGAM stores its own
+    "history-delta", ...}, ...]}`. Read: `store`/`used`/`avail`/`total`,
+    `backend-type` and `gc-status.disk-bytes` (ADR 0033: for an S3 datastore
+    used/avail/total describe the local cache filesystem, the bucket's data
+    is what the last GC found). `history` (PBS's own periodic fill-ratio
+    samples) stays unused -- RESURGAM stores its own
     `usage_measurements` rows instead of parsing PBS's, so multi-instance
     reporting has one consistent source (manifest §9.3), not two.
     """
@@ -568,6 +653,8 @@ def list_datastore_usage(
                 used_bytes=entry["used"],
                 available_bytes=entry["avail"],
                 total_bytes=entry["total"],
+                backend_type=entry.get("backend-type") or "filesystem",
+                gc_disk_bytes=_gc_disk_bytes(entry.get("gc-status")),
             )
             for entry in data
         ]
@@ -575,6 +662,15 @@ def list_datastore_usage(
         return DatastoreUsageListResult(reachable=False, error=f"unexpected response shape: {exc}")
 
     return DatastoreUsageListResult(reachable=True, usage=usage)
+
+
+def _gc_disk_bytes(gc_status: object) -> int | None:
+    """`disk-bytes` of the last GC, or None when no GC has run yet (PBS then
+    reports `upid: null` and zeros, confirmed live on a fresh S3 datastore)."""
+    if not isinstance(gc_status, dict) or not gc_status.get("upid"):
+        return None
+    value = gc_status.get("disk-bytes")
+    return int(value) if isinstance(value, int) else None
 
 
 def get_server_timezone(host: str, port: int, trust: TrustConfig, token: str, timeout: float = 5.0) -> str | None:

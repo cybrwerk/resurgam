@@ -2,7 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { customersApi, datastoresApi } from "../api/resources";
-import type { CapacityForecastOut, DatastoreOut, DatastoreUsageOut } from "../api/types";
+import type { CapacityForecastOut, DatastoreOut, DatastoreUsageOut, S3TrafficOut } from "../api/types";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PageHeader } from "../components/PageHeader";
 import { QueryState } from "../components/QueryState";
@@ -29,6 +29,16 @@ function fullInTone(days: number): StatusTone {
   return "ok";
 }
 
+function totalRequests(traffic: S3TrafficOut): number {
+  return (
+    traffic.s3_get_requests +
+    traffic.s3_put_requests +
+    traffic.s3_post_requests +
+    traffic.s3_head_requests +
+    traffic.s3_delete_requests
+  );
+}
+
 interface Row {
   datastore: DatastoreOut;
   usage: DatastoreUsageOut | undefined;
@@ -40,6 +50,9 @@ export function CapacityTrendsPage() {
 
   const renderFullIn = (forecast: CapacityForecastOut | undefined) => {
     if (!forecast) return "—";
+    if (forecast.status === "not_applicable") {
+      return <span className="mutedText">{t("capacityTrends.s3NoForecast")}</span>;
+    }
     if (forecast.status === "insufficient_history") {
       return <span className="mutedText">{t("capacityTrends.insufficientHistory", { count: forecast.basis_days })}</span>;
     }
@@ -86,7 +99,23 @@ export function CapacityTrendsPage() {
   }));
 
   const columns: DataTableColumn<Row>[] = [
-    { key: "name", header: t("common.name"), render: (row) => row.datastore.name },
+    {
+      key: "name",
+      header: t("common.name"),
+      render: (row) =>
+        row.datastore.backend_type === "s3" ? (
+          <>
+            <div>
+              {row.datastore.name} <StatusBadge tone="info" label="S3" />
+            </div>
+            <div className="mutedText">
+              {row.datastore.s3_bucket ?? "?"} @ {row.datastore.s3_endpoint_host ?? row.datastore.s3_endpoint_name ?? "?"}
+            </div>
+          </>
+        ) : (
+          row.datastore.name
+        ),
+    },
     { key: "customer", header: t("datastores.customer"), render: (row) => customerNameFor(row.datastore.customer_id) },
     {
       key: "usage",
@@ -95,6 +124,37 @@ export function CapacityTrendsPage() {
         if (row.isLoading) return "…";
         const latest = row.usage?.latest;
         if (!latest) return <span className="mutedText">{t("capacityTrends.noData")}</span>;
+        if (row.usage?.backend_type === "s3") {
+          const traffic = row.usage.s3_traffic_30d;
+          return (
+            <>
+              <div>
+                {latest.s3_data_bytes != null
+                  ? t("capacityTrends.s3InBucket", { size: formatBytes(latest.s3_data_bytes) })
+                  : t("capacityTrends.s3SizeAfterGc")}
+              </div>
+              <div title={t("capacityTrends.s3CacheHint")}>
+                <StatusBadge
+                  tone={usagePercentTone(latest.usage_percent)}
+                  label={t("capacityTrends.s3Cache", {
+                    percent: latest.usage_percent,
+                    used: formatBytes(latest.used_bytes),
+                    total: formatBytes(latest.total_bytes),
+                  })}
+                />
+              </div>
+              {traffic && (
+                <div className="mutedText" title={t("capacityTrends.s3TrafficHint")}>
+                  {t("capacityTrends.s3Traffic", {
+                    up: formatBytes(traffic.s3_uploaded_bytes),
+                    down: formatBytes(traffic.s3_downloaded_bytes),
+                    requests: totalRequests(traffic).toLocaleString(),
+                  })}
+                </div>
+              )}
+            </>
+          );
+        }
         return (
           <StatusBadge
             tone={usagePercentTone(latest.usage_percent)}
@@ -108,8 +168,10 @@ export function CapacityTrendsPage() {
       header: t("capacityTrends.logicalSize"),
       render: (row) => {
         const latest = row.usage?.latest;
-        if (!latest || latest.logical_bytes === 0 || latest.used_bytes === 0) return "—";
-        const ratio = latest.logical_bytes / latest.used_bytes;
+        // S3 (ADR 0033): the physical side is the bucket, not the cache disk.
+        const physical = row.usage?.backend_type === "s3" ? latest?.s3_data_bytes : latest?.used_bytes;
+        if (!latest || latest.logical_bytes === 0 || !physical) return "—";
+        const ratio = latest.logical_bytes / physical;
         return `${formatBytes(latest.logical_bytes)} (${ratio.toFixed(1)}x)`;
       },
     },

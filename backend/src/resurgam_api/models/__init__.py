@@ -4,7 +4,7 @@ from resurgam_api.models.audit import AuditEvent
 from resurgam_api.models.backup_gaps import BackupGapException, GapExceptionKind, GuestGapReason, PveGuestBackupGap
 from resurgam_api.models.billing import PricingPlan
 from resurgam_api.models.customer_file_index_settings import CustomerFileIndexSettings
-from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole
+from resurgam_api.models.datastore import Datastore, DatastoreCustomerAssignment, DatastoreRole, PbsS3Endpoint
 from resurgam_api.models.disk_mount import DiskMount, DiskMountStatus
 from resurgam_api.models.encryption_key import EncryptionKey
 from resurgam_api.models.file_index_entry import FileIndexEntry
@@ -67,6 +67,7 @@ __all__ = [
     "LabUplinkIpAllocation",
     "LocalSecretValue",
     "PbsInstance",
+    "PbsS3Endpoint",
     "PricingPlan",
     "ProtectionPolicy",
     "ProtectionStatus",

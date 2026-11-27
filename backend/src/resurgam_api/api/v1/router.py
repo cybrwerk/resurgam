@@ -43,6 +43,7 @@ from resurgam_api.api.v1 import (
     restore_execution,
     restore_plans,
     restore_test_plans,
+    s3_endpoints,
     setup,
     system,
     update_source,
@@ -75,6 +76,7 @@ router.include_router(protection_policies.router)
 router.include_router(pricing_plans.router)
 router.include_router(alarms.router)
 router.include_router(backup_gaps.router)
+router.include_router(s3_endpoints.router)
 router.include_router(billing.router)
 router.include_router(credentials.router)
 router.include_router(users.router)

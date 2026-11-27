@@ -302,6 +302,10 @@ appliance's address already filled in, and lists every value to enter in Zabbix.
 | Each PBS × task type (discovered: backup, verify, prune, garbage_collection, sync) | status of the newest task, time since it started | "Last … task failed" (average), "No … task for too long" > `{$RESURGAM.JOB.AGE.MAX}` (warning) |
 | 3-2-1 gaps | guests in no backup job, offsite copy gaps, critical offsite gaps, largest offsite lag (hours; -1 = no copy expected) | "PVE guests without a backup job" > `{$RESURGAM.GAPS.UNPROTECTED.MAX}` (warning), "Workloads without a current offsite copy" > 0 (warning), "Offsite copies missing or far behind" > 0 (high). Same counting as *3-2-1 gaps*; accepted gaps are not counted |
 
+For an S3-backed datastore the used / available / total items are the local cache filesystem (see
+*S3-backed datastores*), so "filling up" means the cache disk; "full in" is always -1. Discovery passes
+`{#DATASTORE_BACKEND}` (`filesystem` or `s3`) for your own overrides.
+
 Values come every 5 minutes (one request per topic; the per-datastore and per-job items read from it).
 Discovery runs hourly; items of datastores and job types RESURGAM no longer knows are disabled at once
 and deleted after 7 days (Zabbix's defaults).
@@ -430,11 +434,13 @@ same problem twice.
 for its copy on another PBS, following the PBS sync jobs it knows: pull and push jobs (PBS 3.3+),
 including their namespaces, `max-depth` and group filters. A sync job's remote is matched to a
 connected PBS instance by its certificate fingerprint, else by host and port. A copy counts as offsite
-when it is on another PBS instance, or on a datastore with the role "offsite".
+when it is on another PBS instance, on a datastore with the role "offsite", or on an S3-backed
+datastore (see *S3-backed datastores* below).
 
 | Status | Meaning | Alarm |
 |---|---|---|
 | Current | the copy holds every backup, or the newest ones are within the warning threshold (still in transit) | -- |
+| Stored in S3 | the backup itself is on an S3-backed datastore that counts as offsite | -- |
 | Behind | the oldest backup not copied yet is older than the warning / critical threshold | warning / critical |
 | Copy missing | a sync job should copy the workload offsite, but nothing arrived within the warning threshold | critical |
 | Same PBS only | the only copy is on the same PBS (a second copy, not offsite) | warning |
@@ -741,6 +747,44 @@ curl -X POST "localhost:8000/api/v1/backup-groups/<group-id>/assign-policy" \
 
 A policy can only be assigned to a group whose datastore is assigned to the *same* customer the policy belongs to — a cross-customer assignment is rejected with `409 protection_policy_customer_mismatch`. Deleting a policy (`DELETE /protection-policies/<id>`) unassigns it from every group using it (`ON DELETE SET NULL`) rather than failing or cascading. `sync_dr_required` is stored on a policy but not yet evaluated against a specific sync job — `sync_jobs` (below) exists now but isn't cross-referenced back to a policy yet.
 
+### S3-backed datastores (PBS 4.x)
+
+PBS 4 can keep a datastore in an S3 object store (AWS S3, MinIO, RustFS, Ceph RGW, …). RESURGAM
+recognizes these datastores by itself (design: ADR 0033) and shows an **S3** badge with bucket and
+endpoint on *Datastores* and *Capacity & Trends*.
+
+**Offsite.** An S3 datastore counts as offsite: a sync job copying into it creates an offsite copy,
+even on the same PBS, and a backup stored straight on it shows *Stored in S3* on the 3-2-1 Gaps page.
+If the object store stands in the same location as the PBS (a MinIO in the same rack), mark its
+endpoint on site: *Reporting → 3-2-1 Gaps → S3 endpoints → Mark on site* (platform admins; auditors
+see the tab). A reason is required; it is shown with who and when, and written to the audit log.
+Marking it offsite again works the same way.
+
+**Capacity.** For an S3 datastore PBS reports the *local cache filesystem* as used / total, not the
+bucket. RESURGAM therefore:
+
+- shows the cache usage as "Cache N %" and keeps the 80 % / 95 % alarm, worded "local S3 cache
+  filesystem". A full cache disk stops PBS, and it is often the PBS root disk;
+- shows the data in the bucket as found by PBS's last garbage collection ("N in bucket"). Until a GC
+  has run it reads "known after the first garbage collection", so give every S3 datastore a GC
+  schedule (PBS needs it anyway to free space in the bucket);
+- has no "full in" forecast and no "full soon" alarm (a bucket has no fixed size);
+- shows the S3 traffic of the last 30 days (uploaded, downloaded, requests) from PBS's own counters.
+  Providers may bill requests and egress; RESURGAM does not know prices. PBS can also send its own
+  notification when a counter passes a threshold (datastore options on PBS).
+
+**Billing.** The per-GB estimate uses the bucket size for S3 datastores. Until a GC has run, their
+groups are left out and the estimate is marked incomplete.
+
+S3 data has its own price: *Price per GB in S3/month* on the pricing plan (`price_per_s3_gb_month`).
+It is optional. Left empty, S3 data is shown but not charged, for the case where the S3 provider is
+paid some other way (the customer pays it directly, or it is part of a flat fee). It never falls back to
+the normal per-GB price. The billing response and CSV show the S3 share as `estimated_s3_bytes`
+(included in `estimated_physical_bytes`); the normal per-GB price applies to the rest.
+
+RESURGAM only reads from PBS for this (`/config/s3`, the datastore status); the standard RESURGAM token
+is enough.
+
 ### Usage and capacity (manifest §9.3)
 
 Every `/pbs-instances/{id}/sync` call also captures one usage measurement per datastore — no separate trigger needed:
@@ -748,7 +792,7 @@ Every `/pbs-instances/{id}/sync` call also captures one usage measurement per da
 ```bash
 curl "localhost:8000/api/v1/datastores/<datastore-id>/usage" -H "Authorization: Bearer $TOKEN"
 # -> {"latest": {...} | null, "history": [...], "daily_change_bytes": <int>|null, "monthly_change_bytes": <int>|null,
-#     "forecast": {"status": "growing"|"not_growing"|"insufficient_history", "basis_days": <int>,
+#     "forecast": {"status": "growing"|"not_growing"|"insufficient_history"|"not_applicable", "basis_days": <int>,
 #                  "growth_bytes_per_day": <int>|null, "days_until_full": <float>|null, "full_at": <datetime>|null}}
 ```
 
@@ -780,6 +824,9 @@ curl -X POST localhost:8000/api/v1/pricing-plans -H "Authorization: Bearer $TOKE
   -d '{"customer_id":null,"name":"Standard","price_per_vm_month":"10.00","price_per_ct_month":"4.00","price_per_host_month":"2.50","price_per_gb_month":"0.05","currency":"CHF"}'
 curl -X POST localhost:8000/api/v1/pricing-plans -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"customer_id":"<customer-uuid>","name":"Enterprise","price_per_vm_month":"8.00","price_per_gb_month":"0.04","currency":"CHF"}'
+# Optional own price for data in S3-backed datastores (null/omitted = not charged):
+curl -X PATCH localhost:8000/api/v1/pricing-plans/<plan-id> -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"price_per_s3_gb_month":"0.02"}'
 ```
 
 At most one global plan and one plan per customer are enforced at the database level. `GET /datastores/{id}/backup-groups` now filters per group by its *effective* customer (its own override, or the datastore's) rather than requiring the whole datastore be in scope — a shared datastore can show a customer-scoped viewer only their own groups.

@@ -30,3 +30,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.hint {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}

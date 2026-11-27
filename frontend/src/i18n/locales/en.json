@@ -409,7 +409,9 @@
     "jobsModalTitle": "Backup & maintenance jobs — {{name}}",
     "removedFromPbs": "Removed from PBS",
     "removedFromPbsHint": "PBS no longer lists this datastore (noticed {{date}}). Its tenant assignment and history are kept; it is restored automatically if it reappears on PBS.",
-    "importAutoDiscoveryHint": "Datastores are discovered and imported automatically on every Collector sync; use this only to import one right away."
+    "importAutoDiscoveryHint": "Datastores are discovered and imported automatically on every Collector sync; use this only to import one right away.",
+    "s3HintOffsite": "S3 bucket {{bucket}} @ {{endpoint}}. Counts as offsite for 3-2-1. Usage figures are the local cache.",
+    "s3HintOnSite": "S3 bucket {{bucket}} @ {{endpoint}}. The endpoint is marked on site, so it does not count as offsite. Usage figures are the local cache."
   },
   "pbsJobs": {
     "pruneTitle": "Prune jobs (retention)",
@@ -1126,7 +1128,14 @@
     "fullNow": "Full",
     "notGrowing": "Not growing",
     "insufficientHistory": "Not enough history ({{count}}/7 days)",
-    "forecastHint": "Net growth over the last {{days}} days (after prune and garbage collection), full around {{date}}"
+    "forecastHint": "Net growth over the last {{days}} days (after prune and garbage collection), full around {{date}}",
+    "s3NoForecast": "No fixed size (S3)",
+    "s3InBucket": "{{size}} in bucket",
+    "s3SizeAfterGc": "Bucket size known after the first garbage collection",
+    "s3Cache": "Cache {{percent}}% ({{used}} / {{total}})",
+    "s3CacheHint": "For an S3 datastore PBS reports the local cache filesystem as used/total, not the bucket. A full cache disk still breaks PBS, so this is watched like any disk.",
+    "s3Traffic": "30 d: ↑ {{up}} · ↓ {{down}} · {{requests}} requests",
+    "s3TrafficHint": "S3 traffic from PBS's own counters, summed over RESURGAM's measurements. Providers may bill requests and egress (download)."
   },
   "pricingPlans": {
     "title": "Pricing Plans",
@@ -1141,7 +1150,11 @@
     "pricePerGb": "Price per GB/month",
     "currency": "Currency",
     "confirmDeleteTitle": "Delete pricing plan",
-    "confirmDeleteBody": "\"{{name}}\" will be removed."
+    "confirmDeleteBody": "\"{{name}}\" will be removed.",
+    "pricePerS3Gb": "Price per GB in S3/month",
+    "pricePerS3GbPlaceholder": "Not charged",
+    "pricePerS3GbHint": "Optional. Data in S3-backed datastores is charged at this price instead of the per-GB price above. Leave empty if the S3 provider is paid some other way.",
+    "s3NotCharged": "Not charged"
   },
   "syncJobs": {
     "title": "Configured Sync Jobs",
@@ -1162,7 +1175,9 @@
     "pricingPlanGlobal": "Global default",
     "pricingPlanCustomer": "Tenant override",
     "estimatedMonthlyCost": "Estimated monthly cost",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "s3Part": "incl. {{size}} in S3",
+    "s3PartNotCharged": "incl. {{size}} in S3 (not charged)"
   },
   "recoveryEvidence": {
     "title": "Report Center",
@@ -2519,7 +2534,8 @@
       "target_not_connected": "Not checkable",
       "no_copy_job": "No sync job",
       "excepted": "Accepted",
-      "not_required": "Not required"
+      "not_required": "Not required",
+      "stored_offsite": "Stored in S3"
     },
     "statusHint": {
       "ok": "An offsite copy holds every backup, or the newest ones are still within the warning threshold.",
@@ -2529,7 +2545,8 @@
       "target_not_connected": "A sync job copies it to a PBS that is not connected to RESURGAM, so the copy cannot be checked.",
       "no_copy_job": "No sync job covers this workload. Raises an alarm only if its protection policy requires Sync/DR.",
       "excepted": "Accepted by a platform admin with a reason.",
-      "not_required": "The customer's offsite leg is marked not applicable."
+      "not_required": "The customer's offsite leg is marked not applicable.",
+      "stored_offsite": "The backup itself is on an S3 object store that counts as offsite (its endpoint is not marked on site)."
     },
     "cluster": "PVE cluster",
     "guestName": "Name",
@@ -2570,6 +2587,23 @@
     "thresholdsTitle": "Offsite lag thresholds",
     "thresholdsIntro": "How old the oldest backup not copied offsite yet may get before the copy counts as behind. Daily backups with a daily sync are usually 1 to 26 hours behind.",
     "warningHours": "Warning after (hours)",
-    "criticalHours": "Critical after (hours)"
+    "criticalHours": "Critical after (hours)",
+    "tabS3": "S3 endpoints",
+    "s3Title": "S3 endpoints",
+    "s3Intro": "Datastores on an S3 object store count as offsite: a copy that lands there is an offsite copy, and a backup stored there needs no further copy. Mark an endpoint on site if the object store stands in the same location as the PBS. Every change needs a reason and is written to the audit log.",
+    "s3Empty": "No PBS uses an S3 endpoint.",
+    "s3Pbs": "PBS",
+    "s3Endpoint": "Endpoint",
+    "s3Datastores": "Datastores",
+    "s3Location": "Counts as",
+    "s3Offsite": "Offsite",
+    "s3OnSite": "On site",
+    "s3Removed": "Removed from PBS",
+    "s3MarkOnSite": "Mark on site",
+    "s3MarkOffsite": "Mark offsite",
+    "s3MarkOnSiteTitle": "Mark S3 endpoint on site",
+    "s3MarkOffsiteTitle": "Mark S3 endpoint offsite",
+    "s3MarkOnSiteIntro": "Datastores on {{endpoint}} ({{host}}) will no longer count as offsite. Copies there become \"Same PBS only\" and backups stored there need an offsite copy.",
+    "s3MarkOffsiteIntro": "Datastores on {{endpoint}} ({{host}}) will count as offsite again."
   }
 }

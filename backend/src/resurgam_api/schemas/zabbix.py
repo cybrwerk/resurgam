@@ -31,6 +31,11 @@ class ZabbixDatastoreDiscoveryEntry(BaseModel):
     datastore_name: str = Field(alias="{#DATASTORE_NAME}", description="The datastore's PBS-native name.")
     pbs_instance_id: str = Field(alias="{#PBS_INSTANCE_ID}", description="The owning PbsInstance's UUID.")
     pbs_instance_name: str = Field(alias="{#PBS_INSTANCE_NAME}", description="The owning PBS instance's display name.")
+    backend_type: str = Field(
+        default="filesystem",
+        alias="{#DATASTORE_BACKEND}",
+        description="`filesystem` or `s3` (ADR 0033). For `s3` the usage items describe the local cache filesystem.",
+    )
 
 
 class ZabbixDatastoreDiscoveryOut(BaseModel):
@@ -41,9 +46,12 @@ class ZabbixDatastoreDiscoveryOut(BaseModel):
 
 class ZabbixDatastoreUsageValue(BaseModel):
     datastore_id: str = Field(description="Matches {#DATASTORE_ID} from GET /zabbix/discovery/datastores.")
-    used_bytes: int = Field(description="Bytes in use on the datastore, as PBS reports it.")
-    available_bytes: int = Field(description="Bytes still free on the datastore.")
-    total_bytes: int = Field(description="The datastore's total size in bytes.")
+    used_bytes: int = Field(
+        description="Bytes in use on the datastore, as PBS reports it. For an S3 datastore (`backend_type` `s3`) "
+        "this is the local cache filesystem, not the bucket -- see `s3_data_bytes`."
+    )
+    available_bytes: int = Field(description="Bytes still free on the datastore (S3: on the local cache filesystem).")
+    total_bytes: int = Field(description="The datastore's total size in bytes (S3: of the local cache filesystem).")
     usage_percent: float = Field(
         description="used_bytes / total_bytes * 100, rounded to 2 decimals; 0 if total_bytes is 0."
     )
@@ -59,7 +67,16 @@ class ZabbixDatastoreUsageValue(BaseModel):
     days_until_full: float = Field(
         description="Days until the datastore is full at `growth_bytes_per_day`. -1 when there is no full date "
         "(not growing, or fewer than 7 days of history) -- a number either way, so a Zabbix trigger resolves "
-        "when growth stops. The template's 'full in' triggers fire between 0 and their threshold."
+        "when growth stops. The template's 'full in' triggers fire between 0 and their threshold. Always -1 for "
+        "an S3 datastore (a bucket has no fixed size, ADR 0033)."
+    )
+    backend_type: str = Field(
+        default="filesystem", description="`filesystem` or `s3` (PBS 4.x S3-backed datastore, ADR 0033)."
+    )
+    s3_data_bytes: int | None = Field(
+        default=None,
+        description="S3 datastores only: chunk data in the bucket as found by the last garbage collection; null for "
+        "filesystem datastores and before the first GC.",
     )
 
 

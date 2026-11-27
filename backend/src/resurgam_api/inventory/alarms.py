@@ -157,12 +157,18 @@ def _usage_alarms(db: Session, visible: set[uuid.UUID] | None, now: datetime) ->
                     type=alarm_type.value,
                     severity=severity.value,
                     customer_id=customer_id,
-                    message=f"{datastore.name}: {round(percent, 1)}% used",
+                    message=(
+                        f"{datastore.name}: local S3 cache filesystem {round(percent, 1)}% used"
+                        if datastore.is_s3
+                        else f"{datastore.name}: {round(percent, 1)}% used"
+                    ),
                     entity_type="datastore",
                     entity_id=datastore.id,
                 )
             )
-        if usage_rank == 2:
+        if usage_rank == 2 or datastore.is_s3:
+            # No "full in N days" for S3 (ADR 0033): the bucket has no fixed
+            # size, and the cache's own growth says nothing about it.
             continue
 
         forecast = compute_capacity_forecast(load_daily_peaks(db, datastore.id, now), latest.available_bytes, now)

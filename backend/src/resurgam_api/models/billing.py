@@ -39,4 +39,8 @@ class PricingPlan(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     price_per_ct_month: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal(0))
     price_per_host_month: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal(0))
     price_per_gb_month: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    # ADR 0033: data in an S3-backed datastore has its own, optional price.
+    # Null = not charged per GB (the S3 provider may be paid some other way);
+    # it never falls back to price_per_gb_month.
+    price_per_s3_gb_month: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CHF")
